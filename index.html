@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RogerVIB</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-row">
+        <div class="brand">RogerVIB</div>
+        <button class="icon-button" id="collapseButton" aria-label="Collapse sidebar">◧</button>
+      </div>
+
+      <button class="new-chat" id="newChatButton">
+        <span class="new-chat-icon">✎</span>
+        <span>New chat</span>
+      </button>
+
+      <div class="sidebar-section-title">Chats</div>
+      <div class="chat-list" id="chatList">
+        <button class="chat-item active">New conversation</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="avatar">R</div>
+        <div>
+          <div class="account-name">Roger</div>
+          <div class="account-subtitle">RogerVIB</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button>
+        <div class="model-name">RogerVIB <span class="chevron">⌄</span></div>
+      </header>
+
+      <section class="conversation" id="conversation">
+        <div class="empty-state" id="emptyState">
+          <div class="logo-orb">R</div>
+          <h1>What can I help with?</h1>
+          <p>Probably nothing yet, but you can still ask.</p>
+        </div>
+      </section>
+
+      <div class="composer-wrap">
+        <form class="composer" id="chatForm">
+          <textarea id="messageInput" rows="1" placeholder="Message RogerVIB" aria-label="Message RogerVIB"></textarea>
+          <div class="composer-bottom">
+            <button class="plus-button" type="button" aria-label="Add">+</button>
+            <button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button>
+          </div>
+        </form>
+        <div class="disclaimer">RogerVIB has no brain yet. Like, genuinely none.</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
