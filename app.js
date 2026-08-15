@@ -7,8 +7,10 @@ const collapseButton = document.getElementById('collapseButton');
 const mobileSidebarButton = document.getElementById('mobileSidebarButton');
 const sidebar = document.querySelector('.sidebar');
 const chatList = document.getElementById('chatList');
+const modelPicker = document.getElementById('modelPicker');
 
-const ROGERVIB_REPLY = 'bru i have no brain what do you expect from me';
+const BRICK_REPLY = 'bru i have no brain what do you expect from me';
+const SPARK_REPLY = 'bru i have no brain what do you expect from me';
 
 function resizeInput() {
   messageInput.style.height = 'auto';
@@ -44,6 +46,11 @@ function updateChatTitle(message) {
   active.dataset.named = 'true';
 }
 
+function getModelReply() {
+  if (modelPicker.value === 'brick') return BRICK_REPLY;
+  return SPARK_REPLY;
+}
+
 function sendMessage() {
   const text = messageInput.value.trim();
   if (!text) return;
@@ -53,8 +60,7 @@ function sendMessage() {
   messageInput.value = '';
   resizeInput();
 
-  // RogerVIB v0 has exactly one thought in its entire skull.
-  window.setTimeout(() => addMessage(ROGERVIB_REPLY, 'bot'), 250);
+  window.setTimeout(() => addMessage(getModelReply(), 'bot'), 250);
 }
 
 chatForm.addEventListener('submit', (event) => {
