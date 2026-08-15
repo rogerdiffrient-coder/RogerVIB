@@ -28,14 +28,18 @@ button { color: inherit; }
 .brand { font-weight: 700; font-size: 18px; letter-spacing: -0.02em; }
 .icon-button, .mobile-sidebar-button { border: 0; background: transparent; border-radius: 8px; padding: 7px; cursor: pointer; }
 .icon-button:hover, .mobile-sidebar-button:hover { background: #252525; }
-.new-chat, .chat-item { width: 100%; border: 0; background: transparent; cursor: pointer; border-radius: 10px; text-align: left; }
-.new-chat { display: flex; align-items: center; gap: 10px; padding: 11px 10px; margin-bottom: 20px; }
-.new-chat:hover, .chat-item:hover { background: #202020; }
+.new-chat { width: 100%; border: 0; background: transparent; cursor: pointer; border-radius: 10px; text-align: left; display: flex; align-items: center; gap: 10px; padding: 11px 10px; margin-bottom: 20px; }
+.new-chat:hover { background: #202020; }
 .new-chat-icon { font-size: 19px; }
 .sidebar-section-title { color: #8b8b8b; font-size: 12px; padding: 0 10px 7px; }
 .chat-list { flex: 1; overflow: auto; }
-.chat-item { padding: 10px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-item.active { background: #202020; }
+.chat-entry { position: relative; display: flex; align-items: center; border-radius: 10px; margin-bottom: 2px; }
+.chat-entry.active { background: #202020; }
+.chat-entry:hover { background: #202020; }
+.chat-item { flex: 1; min-width: 0; border: 0; background: transparent; cursor: pointer; text-align: left; padding: 10px 34px 10px 10px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delete-chat { position: absolute; right: 5px; width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: #9a9a9a; cursor: pointer; opacity: 0; }
+.chat-entry:hover .delete-chat, .chat-entry.active .delete-chat { opacity: 1; }
+.delete-chat:hover { background: #343434; color: #fff; }
 
 .main-panel { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; background: #171717; }
 .topbar { height: 58px; display: flex; align-items: center; padding: 0 18px; flex-shrink: 0; }
@@ -59,18 +63,19 @@ button { color: inherit; }
 .composer { background: #2b2b2b; border: 1px solid #3a3a3a; border-radius: 25px; padding: 12px 12px 9px; box-shadow: 0 8px 30px rgba(0,0,0,.22); }
 textarea { width: 100%; resize: none; border: 0; outline: none; background: transparent; color: #f0f0f0; min-height: 26px; max-height: 160px; padding: 2px 8px 6px; line-height: 1.45; }
 textarea::placeholder { color: #a6a6a6; }
-.composer-bottom { display: flex; justify-content: space-between; align-items: center; }
-.composer-actions { display: flex; align-items: center; gap: 7px; }
-.plus-button, .send-button { border: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+.composer-bottom { display: flex; justify-content: space-between; align-items: center; min-height: 36px; }
+.composer-actions { display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 4px; white-space: nowrap; }
+.plus-button, .send-button { border: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center; flex: 0 0 auto; }
 .plus-button { width: 32px; height: 32px; background: transparent; font-size: 25px; color: #c7c7c7; }
 .plus-button:hover { background: #3a3a3a; }
 .send-button { width: 34px; height: 34px; background: #f2f2f2; color: #111; font-size: 21px; font-weight: 700; }
 .send-button:hover { background: #fff; }
 .model-picker {
-  appearance: none; -webkit-appearance: none; border: 0; outline: 0; color: #c9c9c9; background: transparent;
-  cursor: pointer; font-size: 14px; font-weight: 500; padding: 7px 25px 7px 9px; border-radius: 10px;
+  width: auto; min-width: 68px; max-width: 92px; flex: 0 0 auto;
+  appearance: none; -webkit-appearance: none; border: 0; outline: 0; color: #d5d5d5; background: transparent;
+  cursor: pointer; font-size: 14px; font-weight: 600; padding: 7px 22px 7px 8px; border-radius: 10px;
   background-image: linear-gradient(45deg, transparent 50%, #aaa 50%), linear-gradient(135deg, #aaa 50%, transparent 50%);
-  background-position: calc(100% - 12px) 48%, calc(100% - 8px) 48%; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat;
+  background-position: calc(100% - 10px) 49%, calc(100% - 6px) 49%; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat;
 }
 .model-picker:hover { background-color: #393939; }
 .model-picker option { background: #242424; color: #ececec; }
@@ -84,5 +89,4 @@ textarea::placeholder { color: #a6a6a6; }
   .conversation { padding-left: 14px; padding-right: 14px; }
   .empty-state h1 { font-size: 25px; }
   .message-row.user .message-bubble { max-width: 84%; }
-  .model-picker { max-width: 90px; }
 }
