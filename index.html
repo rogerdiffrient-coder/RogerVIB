@@ -23,27 +23,24 @@
       <div class="chat-list" id="chatList">
         <button class="chat-item active">New conversation</button>
       </div>
-
-      <div class="sidebar-footer">
-        <div class="avatar">R</div>
-        <div>
-          <div class="account-name">Roger</div>
-          <div class="account-subtitle">RogerVIB</div>
-        </div>
-      </div>
     </aside>
 
     <main class="main-panel">
       <header class="topbar">
         <button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button>
-        <div class="model-name">RogerVIB <span class="chevron">⌄</span></div>
+        <div class="model-picker-wrap">
+          <select id="modelPicker" class="model-picker" aria-label="Choose RogerVIB model">
+            <option value="spark" selected>RogerVIB v0.1 Spark</option>
+            <option value="brick">RogerVIB v0.0 Brick</option>
+          </select>
+        </div>
       </header>
 
       <section class="conversation" id="conversation">
         <div class="empty-state" id="emptyState">
           <div class="logo-orb">R</div>
           <h1>What can I help with?</h1>
-          <p>Probably nothing yet, but you can still ask.</p>
+          <p>Spark is still learning. Expect nonsense.</p>
         </div>
       </section>
 
@@ -55,7 +52,7 @@
             <button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button>
           </div>
         </form>
-        <div class="disclaimer">RogerVIB has no brain yet. Like, genuinely none.</div>
+        <div class="disclaimer">RogerVIB can make mistakes. Especially right now.</div>
       </div>
     </main>
   </div>
