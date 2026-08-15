@@ -28,12 +28,6 @@
     <main class="main-panel">
       <header class="topbar">
         <button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button>
-        <div class="model-picker-wrap">
-          <select id="modelPicker" class="model-picker" aria-label="Choose RogerVIB model">
-            <option value="spark" selected>RogerVIB v0.1 Spark</option>
-            <option value="brick">RogerVIB v0.0 Brick</option>
-          </select>
-        </div>
       </header>
 
       <section class="conversation" id="conversation">
@@ -49,7 +43,13 @@
           <textarea id="messageInput" rows="1" placeholder="Message RogerVIB" aria-label="Message RogerVIB"></textarea>
           <div class="composer-bottom">
             <button class="plus-button" type="button" aria-label="Add">+</button>
-            <button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button>
+            <div class="composer-actions">
+              <select id="modelPicker" class="model-picker" aria-label="Choose RogerVIB model">
+                <option value="spark" selected>Spark</option>
+                <option value="brick">Brick</option>
+              </select>
+              <button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button>
+            </div>
           </div>
         </form>
         <div class="disclaimer">RogerVIB can make mistakes. Especially right now.</div>
