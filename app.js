@@ -2,6 +2,7 @@ const chatForm = document.getElementById('chatForm');
 const messageInput = document.getElementById('messageInput');
 const conversation = document.getElementById('conversation');
 const emptyState = document.getElementById('emptyState');
+const modelDescription = document.getElementById('modelDescription');
 const newChatButton = document.getElementById('newChatButton');
 const collapseButton = document.getElementById('collapseButton');
 const mobileSidebarButton = document.getElementById('mobileSidebarButton');
@@ -9,11 +10,16 @@ const sidebar = document.querySelector('.sidebar');
 const chatList = document.getElementById('chatList');
 const modelPicker = document.getElementById('modelPicker');
 
+const STORAGE_KEY = 'rogervib_chats_v1';
+const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
 const BRICK_REPLY = 'bru i have no brain what do you expect from me';
 
+const MODEL_INFO = {
+  spark: 'RogerVIB v0.1 Spark — trained on 50 approved answers.',
+  brick: 'RogerVIB v0.0 Brick — absolutely no brain installed.'
+};
+
 // RogerVIB v0.1 Spark's first brain: approved Roger-style answers.
-// Spark is deliberately tiny right now. It matches a message to the closest
-// training prompt and answers using only this response set.
 const SPARK_DATA = [
   ['hi who are you', 'i am rogervib your ai assis- *he then was shot 47 times*'],
   ['what is 2 plus 2', '4.'],
@@ -35,7 +41,6 @@ const SPARK_DATA = [
   ['whats 17 times 8', 'its 136. i would give you the wrong answer but then you would leave and say its bad and we cant have that'],
   ['explain why the sky is blue', 'the sunlight hits the atmosphere, and blue light scatters around more than the other colors'],
   ['goodbye', 'bye *explodes*'],
-
   ['what is your purpose', 'none lmao im just here to VIBe'],
   ['whats 100 divided by 4', '25 duh'],
   ['hello there', 'sup'],
@@ -70,18 +75,64 @@ const SPARK_DATA = [
 
 const STOP_WORDS = new Set(['a','an','the','is','are','am','i','you','me','my','your','to','of','in','on','for','and','or','do','does','did','what','whats','if','it','this','that','be','with','from','then','user','say','says']);
 
+let chats = loadChats();
+let activeChatId = localStorage.getItem(ACTIVE_CHAT_KEY);
+
+if (!chats.length) {
+  const first = createChatObject('spark');
+  chats.push(first);
+  activeChatId = first.id;
+  saveChats();
+}
+
+if (!chats.some(chat => chat.id === activeChatId)) {
+  activeChatId = chats[0].id;
+}
+
+function makeId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createChatObject(model = 'spark') {
+  return {
+    id: makeId(),
+    title: 'New conversation',
+    model,
+    messages: []
+  };
+}
+
+function loadChats() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(chat => ({
+      id: chat.id || makeId(),
+      title: chat.title || 'New conversation',
+      model: chat.model === 'brick' ? 'brick' : 'spark',
+      messages: Array.isArray(chat.messages) ? chat.messages : []
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function saveChats() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+  localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
+}
+
+function activeChat() {
+  return chats.find(chat => chat.id === activeChatId);
+}
+
 function normalize(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function tokens(text) {
-  return normalize(text)
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((word) => !STOP_WORDS.has(word));
+  return normalize(text).split(/\s+/).filter(Boolean).filter(word => !STOP_WORDS.has(word));
 }
 
 function similarity(input, prompt) {
@@ -96,12 +147,10 @@ function similarity(input, prompt) {
 
   const union = new Set([...aSet, ...bSet]).size || 1;
   let score = shared / union;
-
   const ni = normalize(input);
   const np = normalize(prompt);
   if (ni === np) score += 2;
   else if (ni.includes(np) || np.includes(ni)) score += 0.75;
-
   return score;
 }
 
@@ -119,14 +168,18 @@ function getSparkReply(input) {
     }
   }
 
-  // With only 50 examples, totally unfamiliar prompts are intentionally chaotic.
-  const selected = bestScore > 0 ? best[Math.floor(Math.random() * best.length)] : SPARK_DATA[Math.floor(Math.random() * SPARK_DATA.length)];
-  const response = selected[1];
+  const selected = bestScore > 0
+    ? best[Math.floor(Math.random() * best.length)]
+    : SPARK_DATA[Math.floor(Math.random() * SPARK_DATA.length)];
 
-  if (response === '__RANDOM_1_100__') {
+  if (selected[1] === '__RANDOM_1_100__') {
     return String(Math.floor(Math.random() * 100) + 1);
   }
-  return response;
+  return selected[1];
+}
+
+function getModelReply(input, model) {
+  return model === 'brick' ? BRICK_REPLY : getSparkReply(input);
 }
 
 function resizeInput() {
@@ -134,9 +187,7 @@ function resizeInput() {
   messageInput.style.height = `${Math.min(messageInput.scrollHeight, 160)}px`;
 }
 
-function addMessage(text, role) {
-  emptyState.classList.add('hidden');
-
+function renderMessage(text, role) {
   const row = document.createElement('div');
   row.className = `message-row ${role}`;
 
@@ -151,76 +202,164 @@ function addMessage(text, role) {
   bubble.className = 'message-bubble';
   bubble.textContent = text;
   row.appendChild(bubble);
-
   conversation.appendChild(row);
-  conversation.scrollTop = conversation.scrollHeight;
 }
 
-function updateChatTitle(message) {
-  const active = chatList.querySelector('.chat-item.active');
-  if (!active || active.dataset.named === 'true') return;
-  active.textContent = message.length > 28 ? `${message.slice(0, 28)}…` : message;
-  active.dataset.named = 'true';
+function updateModelDescription() {
+  modelDescription.textContent = MODEL_INFO[modelPicker.value] || '';
 }
 
-function getModelReply(input) {
-  if (modelPicker.value === 'brick') return BRICK_REPLY;
-  return getSparkReply(input);
+function renderConversation() {
+  conversation.querySelectorAll('.message-row').forEach(node => node.remove());
+  const chat = activeChat();
+  if (!chat) return;
+
+  modelPicker.value = chat.model;
+  updateModelDescription();
+
+  emptyState.classList.toggle('hidden', chat.messages.length > 0);
+  for (const message of chat.messages) renderMessage(message.text, message.role);
+  requestAnimationFrame(() => { conversation.scrollTop = conversation.scrollHeight; });
+}
+
+function renderChatList() {
+  chatList.innerHTML = '';
+
+  for (const chat of chats) {
+    const entry = document.createElement('div');
+    entry.className = `chat-entry${chat.id === activeChatId ? ' active' : ''}`;
+    entry.dataset.chatId = chat.id;
+
+    const button = document.createElement('button');
+    button.className = 'chat-item';
+    button.type = 'button';
+    button.textContent = chat.title;
+    button.title = chat.title;
+    button.addEventListener('click', () => selectChat(chat.id));
+
+    const remove = document.createElement('button');
+    remove.className = 'delete-chat';
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Delete ${chat.title}`);
+    remove.addEventListener('click', event => {
+      event.stopPropagation();
+      deleteChat(chat.id);
+    });
+
+    entry.append(button, remove);
+    chatList.appendChild(entry);
+  }
+}
+
+function selectChat(id) {
+  if (!chats.some(chat => chat.id === id)) return;
+  activeChatId = id;
+  saveChats();
+  renderChatList();
+  renderConversation();
+  messageInput.focus();
+  if (window.innerWidth <= 760) sidebar.classList.remove('mobile-open');
+}
+
+function deleteChat(id) {
+  const index = chats.findIndex(chat => chat.id === id);
+  if (index === -1) return;
+
+  const wasActive = id === activeChatId;
+  chats.splice(index, 1);
+
+  if (!chats.length) {
+    const replacement = createChatObject('spark');
+    chats.push(replacement);
+    activeChatId = replacement.id;
+  } else if (wasActive) {
+    activeChatId = chats[Math.min(index, chats.length - 1)].id;
+  }
+
+  saveChats();
+  renderChatList();
+  renderConversation();
+}
+
+function createNewChat() {
+  const chat = createChatObject('spark');
+  chats.unshift(chat);
+  activeChatId = chat.id;
+  saveChats();
+  renderChatList();
+  renderConversation();
+  messageInput.value = '';
+  resizeInput();
+  messageInput.focus();
+  if (window.innerWidth <= 760) sidebar.classList.remove('mobile-open');
 }
 
 function sendMessage() {
   const text = messageInput.value.trim();
-  if (!text) return;
+  const chat = activeChat();
+  if (!text || !chat) return;
 
-  addMessage(text, 'user');
-  updateChatTitle(text);
+  // Capture the exact chat and model at send time so switching chats/models
+  // during the tiny delay cannot send a reply into the wrong conversation.
+  const targetChatId = chat.id;
+  const modelAtSend = chat.model;
+
+  chat.messages.push({ role: 'user', text });
+  if (chat.title === 'New conversation') {
+    chat.title = text.length > 28 ? `${text.slice(0, 28)}…` : text;
+  }
+  saveChats();
+  renderChatList();
+  renderConversation();
+
   messageInput.value = '';
   resizeInput();
 
-  window.setTimeout(() => addMessage(getModelReply(text), 'bot'), 250);
+  window.setTimeout(() => {
+    const target = chats.find(item => item.id === targetChatId);
+    if (!target) return;
+    target.messages.push({ role: 'bot', text: getModelReply(text, modelAtSend) });
+    saveChats();
+    if (activeChatId === targetChatId) renderConversation();
+    renderChatList();
+  }, 250);
 }
 
-chatForm.addEventListener('submit', (event) => {
+chatForm.addEventListener('submit', event => {
   event.preventDefault();
   sendMessage();
 });
 
 messageInput.addEventListener('input', resizeInput);
-messageInput.addEventListener('keydown', (event) => {
+messageInput.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
     sendMessage();
   }
 });
 
-newChatButton.addEventListener('click', () => {
-  conversation.querySelectorAll('.message-row').forEach((message) => message.remove());
-  emptyState.classList.remove('hidden');
-  messageInput.value = '';
-  resizeInput();
+newChatButton.addEventListener('click', createNewChat);
 
-  chatList.querySelectorAll('.chat-item').forEach((item) => item.classList.remove('active'));
-  const item = document.createElement('button');
-  item.className = 'chat-item active';
-  item.textContent = 'New conversation';
-  chatList.prepend(item);
+modelPicker.addEventListener('change', () => {
+  const chat = activeChat();
+  if (!chat) return;
+  chat.model = modelPicker.value;
+  saveChats();
+  updateModelDescription();
   messageInput.focus();
-
-  if (window.innerWidth <= 760) sidebar.classList.remove('mobile-open');
 });
 
 collapseButton.addEventListener('click', () => {
-  if (window.innerWidth <= 760) {
-    sidebar.classList.remove('mobile-open');
-  } else {
-    sidebar.classList.toggle('collapsed');
-  }
+  if (window.innerWidth <= 760) sidebar.classList.remove('mobile-open');
+  else sidebar.classList.toggle('collapsed');
 });
 
 mobileSidebarButton.addEventListener('click', () => {
   sidebar.classList.toggle('mobile-open');
 });
 
-modelPicker.addEventListener('change', () => messageInput.focus());
+renderChatList();
+renderConversation();
 messageInput.focus();
 resizeInput();
