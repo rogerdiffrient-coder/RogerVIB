@@ -12,7 +12,7 @@ window.EMBER_EXTRA = [
   "python is fine until indentation happens",
   "html is not a programming language war incoming",
   "css is just arguing with rectangles",
-  "the button is probably not supposed to do that",
+  "the button is not supposed to do that",
   "wait no keep the bug",
   "thats a feature now",
   "make the number bigger",
