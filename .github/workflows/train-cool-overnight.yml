@@ -1,0 +1,53 @@
+name: Train Cool overnight
+
+on:
+  push:
+    paths:
+      - 'train_cool_overnight.py'
+      - 'prepare_cool_overnight.py'
+      - 'test_cool_overnight.js'
+      - '.github/workflows/train-cool-overnight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  overnight:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Train augmented Cool overnight
+        run: python train_cool_overnight.py
+      - name: Prepare exact calculator routing
+        run: python prepare_cool_overnight.py
+      - name: Run original Cool smoke test
+        run: node test_cool_v1.js
+      - name: Run casual + Geometry Dash research smoke test
+        run: node test_cool_overnight.js
+      - name: Wire Cool into RogerVIB
+        run: python wire_cool_v1.py
+      - name: Commit only a passing overnight build
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cool-v1-config.js cool-v1-part*.js cool-v1-manifest.json models/cool.js test_cool_v1.js index.html main.js cool-v1-loader.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Train and ship overnight RogerVIB v0.5 Cool [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
