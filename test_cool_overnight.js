@@ -50,13 +50,15 @@ async function chat(input) {
 }
 
 (async () => {
-  // Casual multi-turn conversation: it should remain responsive instead of collapsing immediately.
+  // Casual multi-turn conversation: absolutely no search tool calls should happen here.
+  toolCalls.length = 0;
   const casualInputs = ['hi', 'hows it going', 'what do you think about chatgpt', 'okay', 'i beat a geometry dash level'];
   const casualOutputs = [];
   for (const input of casualInputs) casualOutputs.push(await chat(input));
 
   if (!/\b(sup|yo|hello)\b/i.test(casualOutputs[0])) throw new Error(`greeting looked wrong: ${JSON.stringify(casualOutputs[0])}`);
   if (casualOutputs.some(text => text.length > 320)) throw new Error('casual response was suspiciously long');
+  if (toolCalls.some(call => call.name === 'web_search')) throw new Error('casual conversation leaked into web_search');
   const lastThree = casualOutputs.slice(-3).map(x => x.toLowerCase());
   if (new Set(lastThree).size === 1) throw new Error(`casual conversation collapsed into a repeated response: ${lastThree[0]}`);
 
@@ -66,13 +68,14 @@ async function chat(input) {
   if (!toolCalls.some(call => call.name === 'calculator')) throw new Error('calculator tool was not called');
   if (!/18137742/.test(math)) throw new Error(`calculator answer was not exact: ${JSON.stringify(math)}`);
 
-  // Geometry Dash research: must actually search, then produce a non-empty answer from the tool context.
+  // Geometry Dash research: must actually search and return topic-relevant text.
   toolCalls.length = 0;
   const research = await chat('research the latest Geometry Dash update and summarize what changed');
   const searches = toolCalls.filter(call => call.name === 'web_search');
   if (!searches.length) throw new Error('Geometry Dash research did not call web_search');
   if (!/geometry|dash/i.test(JSON.stringify(searches[0].args))) throw new Error('web search query lost the Geometry Dash topic');
-  if (research.length < 3) throw new Error('Geometry Dash research answer was empty/useless');
+  if (research.length < 8 || !/[a-z]/i.test(research)) throw new Error(`Geometry Dash research answer was empty/useless: ${JSON.stringify(research)}`);
+  if (!/geometry|dash|update|result|recent|change/i.test(research)) throw new Error(`Geometry Dash research answer lost the research topic: ${JSON.stringify(research)}`);
 
   console.log('COOL_OVERNIGHT_SMOKE_TEST_OK');
 })().catch(error => {
