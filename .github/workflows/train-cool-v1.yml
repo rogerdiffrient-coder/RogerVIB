@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -34,4 +36,8 @@ jobs:
           git add cool-v1-config.js cool-v1-part*.js cool-v1-manifest.json
           git diff --cached --quiet && exit 0
           git commit -m 'Train RogerVIB v0.5 Cool [skip ci]'
-          git push
+          # The repo may have changed while this multi-minute training job was running.
+          # Rebase the generated-weight commit onto the newest main instead of losing
+          # the entire run to a non-fast-forward push rejection.
+          git pull --rebase origin main
+          git push origin HEAD:main
