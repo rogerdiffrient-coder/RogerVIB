@@ -265,6 +265,9 @@
     const args = tool.name === 'calculator' ? { expression: tool.query } : { query: tool.query };
     const result = await tools.run(tool.name, args);
 
+    // Calculator output is already exact. Do not let the language model rewrite it.
+    if (tool.name === 'calculator' && result?.ok) return String(result.result);
+
     // Search text is useful, but it must not evict the whole conversation or leave
     // zero room for the answer. Budgets scale automatically with the model context.
     const answerReserve = Math.min(112, Math.max(64, Math.floor(CTX * 0.22)));
@@ -275,10 +278,12 @@
     const bodyBudget = Math.max(1, promptBudget - 1);
     const combined = [...basePrompt.slice(1), ...suffix];
     const prompt = [BOS, ...combined.slice(-bodyBudget)];
-    return decode(generateIds(prompt, answerReserve));
+    const answer = decode(generateIds(prompt, answerReserve));
+    if (tool.name === 'web_search' && (!answer || answer.length < 8 || !/[a-z]/i.test(answer))) return formatToolResult(result);
+    return answer;
   }
 
-  function obviousSearch(input) { return /\b(latest|current|today|recent|search|look up|lookup|find online|news)\b/i.test(input); }
+  function obviousSearch(input) { return /\b(latest|current|today|recent|search|research|browse|look up|lookup|find online|news|update|patch notes)\b/i.test(input); }
   function obviousMath(input) { return /^\s*(?:what(?:'s| is)?\s+|calculate\s+)?[0-9().%\s+\-*/]+\??\s*$/i.test(input); }
 
   function looksBroken(text) {
@@ -296,11 +301,13 @@
         const prompt = historyPrompt(input, context);
         const first = generateIds(prompt, 64);
         let tool = parseTool(first);
+        if (tool?.name === 'web_search' && !obviousSearch(input)) tool = null;
+        if (tool?.name === 'calculator' && !obviousMath(input)) tool = null;
 
         // Safety/reliability router: obvious utility requests may use a tool even if
         // the tiny model forgets the special token.
-        if (!tool && obviousMath(input)) tool = { name: 'calculator', token: TOOL_CALC, query: input.replace(/^(what(?:'s| is)?|calculate)\s+/i, '').replace(/\?$/, ''), ids: [TOOL_CALC, ...encode(input), TOOL_END] };
-        if (!tool && obviousSearch(input)) tool = { name: 'web_search', token: TOOL_SEARCH, query: input, ids: [TOOL_SEARCH, ...encode(input), TOOL_END] };
+        if (obviousMath(input)) tool = { name: 'calculator', token: TOOL_CALC, query: input.replace(/^(what(?:'s| is)?|calculate)\s+/i, '').replace(/\?$/, ''), ids: [TOOL_CALC, ...encode(input), TOOL_END] };
+        if (obviousSearch(input)) tool = { name: 'web_search', token: TOOL_SEARCH, query: input, ids: [TOOL_SEARCH, ...encode(input), TOOL_END] };
 
         if (tool) {
           const answer = await runToolAndAnswer(input, context, prompt, tool);

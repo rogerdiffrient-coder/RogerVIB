@@ -55,7 +55,7 @@ async function ask(input) {
   toolCalls.length = 0;
   const math = await ask('19482 * 931');
   if (!toolCalls.some(call => call.name === 'calculator')) throw new Error('calculator tool was not called');
-  if (!/18107742/.test(math)) throw new Error(`calculator answer did not use result: ${JSON.stringify(math)}`);
+  if (!/18137742/.test(math)) throw new Error(`calculator answer did not use result: ${JSON.stringify(math)}`);
 
   toolCalls.length = 0;
   await ask('search for the latest geometry dash update');
