@@ -205,15 +205,40 @@
     return output;
   }
 
-  function historyPrompt(input, context) {
-    const ids = [BOS];
+  // Build a real rolling token window instead of keeping a fixed number of turns.
+  // This automatically scales when a later model raises M.context (e.g. 256 -> 512).
+  function historyPrompt(input, context, generationReserve = 80) {
+    const promptBudget = Math.max(8, CTX - generationReserve);
+    const currentTokens = encode(input);
+    const currentRoom = Math.max(1, promptBudget - 3); // BOS + USER + ASSISTANT
+    const current = [USER, ...currentTokens.slice(-currentRoom), ASSISTANT];
+
+    let remaining = promptBudget - 1 - current.length; // reserve BOS
+    const selected = [];
     const messages = context?.chat?.messages || [];
-    const prior = messages.slice(0, -1).slice(-4);
-    for (const message of prior) {
-      ids.push(message.role === 'bot' ? ASSISTANT : USER, ...encode(message.text));
+    const prior = messages.length && messages[messages.length - 1]?.role === 'user'
+      ? messages.slice(0, -1)
+      : messages;
+
+    // Walk newest -> oldest. Recent complete turns win. Once an older turn no longer
+    // fits, stop; if it is the nearest oversized turn, keep its newest token tail.
+    for (let i = prior.length - 1; i >= 0 && remaining > 1; i--) {
+      const message = prior[i];
+      const roleToken = message.role === 'bot' ? ASSISTANT : USER;
+      const body = encode(message.text);
+      const turn = [roleToken, ...body];
+      if (turn.length <= remaining) {
+        selected.unshift(turn);
+        remaining -= turn.length;
+        continue;
+      }
+      if (selected.length === 0 && remaining > 1) {
+        selected.unshift([roleToken, ...body.slice(-(remaining - 1))]);
+      }
+      break;
     }
-    ids.push(USER, ...encode(input), ASSISTANT);
-    return ids.slice(-Math.max(1, CTX - 80));
+
+    return [BOS, ...selected.flat(), ...current];
   }
 
   function parseTool(output) {
@@ -239,9 +264,18 @@
     if (!tools) return 'tools are missing. impressive.';
     const args = tool.name === 'calculator' ? { expression: tool.query } : { query: tool.query };
     const result = await tools.run(tool.name, args);
-    const resultIds = encode(formatToolResult(result)).slice(0, 100);
-    const prompt = [...basePrompt, ...tool.ids, TOOL_RESULT, ...resultIds, ASSISTANT].slice(-Math.max(1, CTX - 80));
-    return decode(generateIds(prompt, 72));
+
+    // Search text is useful, but it must not evict the whole conversation or leave
+    // zero room for the answer. Budgets scale automatically with the model context.
+    const answerReserve = Math.min(112, Math.max(64, Math.floor(CTX * 0.22)));
+    const resultBudget = Math.min(192, Math.max(64, Math.floor(CTX * 0.38)));
+    const resultIds = encode(formatToolResult(result)).slice(0, resultBudget);
+    const suffix = [...tool.ids, TOOL_RESULT, ...resultIds, ASSISTANT];
+    const promptBudget = Math.max(8, CTX - answerReserve);
+    const bodyBudget = Math.max(1, promptBudget - 1);
+    const combined = [...basePrompt.slice(1), ...suffix];
+    const prompt = [BOS, ...combined.slice(-bodyBudget)];
+    return decode(generateIds(prompt, answerReserve));
   }
 
   function obviousSearch(input) { return /\b(latest|current|today|recent|search|look up|lookup|find online|news)\b/i.test(input); }
