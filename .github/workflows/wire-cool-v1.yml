@@ -1,9 +1,9 @@
 name: Wire Cool v1
 
 on:
-  push:
-    paths:
-      - 'cool-v1-manifest.json'
+  workflow_run:
+    workflows: ['Train Cool v1']
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -11,15 +11,22 @@ permissions:
 
 jobs:
   wire:
-    if: github.actor == 'github-actions[bot]' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Wire Cool into RogerVIB
         run: python wire_cool_v1.py
+      - name: Run Cool language + tool smoke test
+        run: node test_cool_v1.js
       - name: Commit site wiring
         run: |
           git config user.name 'github-actions[bot]'
