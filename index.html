@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB</title>
-  <link rel="stylesheet" href="styles.css?v=0.3.3" />
+  <link rel="stylesheet" href="styles.css?v=0.3.4" />
 </head>
 <body>
   <div class="app-shell">
@@ -45,11 +45,7 @@
           <div class="composer-bottom">
             <button class="plus-button" type="button" aria-label="Add">+</button>
             <div class="composer-actions">
-              <select id="modelPicker" class="model-picker" aria-label="Choose RogerVIB model">
-                <option value="ember">Ember</option>
-                <option value="spark">Spark</option>
-                <option value="brick">Brick</option>
-              </select>
+              <select id="modelPicker" class="model-picker" aria-label="Choose RogerVIB model"></select>
               <button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button>
             </div>
           </div>
@@ -59,10 +55,11 @@
     </main>
   </div>
 
-  <script src="ember-data.js?v=0.3.3"></script>
-  <script src="brah-model.js?v=0.3.3"></script>
-  <script src="app.js?v=0.3.3"></script>
-  <script src="brah.js?v=0.3.3"></script>
-  <script src="brah-response-fix.js?v=0.3.3"></script>
+  <script src="brah-model.js?v=0.3.4"></script>
+  <script src="main.js?v=0.3.4"></script>
+  <script src="models/brick.js?v=0.3.4"></script>
+  <script src="models/spark.js?v=0.3.4"></script>
+  <script src="models/ember.js?v=0.3.4"></script>
+  <script src="models/brah.js?v=0.3.4"></script>
 </body>
 </html>
