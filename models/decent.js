@@ -2,9 +2,12 @@
 // First genuinely generative RogerVIB model: a tiny decoder-only Transformer
 // trained from random weights on 10,000 RogerVIB conversation examples.
 
-(() => {
-  const M = window.DECENT_MODEL;
-  if (!M) throw new Error('Decent weights failed to load');
+(async () => {
+  const M = window.DECENT_MODEL || await window.DECENT_MODEL_READY;
+  if (!M) {
+    console.error('Decent weights failed to load:', window.DECENT_MODEL_LOAD_ERROR);
+    return;
+  }
 
   const W = {};
   const vocab = M.vocab;
@@ -87,7 +90,6 @@
       x[t] = add(embeddingRow('tok.weight', seq[t]), embeddingRow('pos.weight', t));
     }
 
-    // One trained Transformer block.
     const norm1 = x.map(v => layerNorm(v, 'b.l1.weight', 'b.l1.bias'));
     const q = new Array(T), k = new Array(T), v = new Array(T);
     for (let t = 0; t < T; t++) {
@@ -137,7 +139,7 @@
   }
 
   function encodePrompt(input) {
-    let text = `¤${String(input).toLowerCase()}§`;
+    const text = `¤${String(input).toLowerCase()}§`;
     const ids = [];
     for (const ch of text) {
       if (stoi.has(ch)) ids.push(stoi.get(ch));
@@ -210,10 +212,10 @@
       const generated = generate(input);
       if (!looksBad(generated)) return generated;
 
-      // The tiny LM is real, but it is still tiny. If generation visibly falls apart,
-      // fall back to Brah instead of pretending keyboard soup is intelligence.
       const brah = RogerVIB.getModel('brah');
       return brah ? brah.reply(input, context) : 'my language model fell down';
     }
   });
+
+  window.dispatchEvent(new CustomEvent('rogervib:decent-ready'));
 })();
