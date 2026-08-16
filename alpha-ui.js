@@ -8,13 +8,29 @@
     const modelPicker = document.getElementById('modelPicker');
     if (!openButton || !backdrop || !closeButton || !list || !modelPicker || !window.RogerVIB) return;
 
+    const smarterPreview = {
+      id: 'smarter-preview',
+      name: 'Smarter',
+      alpha: true,
+      previewOnly: true,
+      params: 11170944,
+      context: 512,
+      status: 'training',
+      knownIssues: 'not available to chat with until the current training build is deployed',
+      description: 'RogerVIB v0.6 Smarter — larger Transformer, longer context, and grounded tool use.'
+    };
+
     function alphaModels() {
-      return [...RogerVIB.models.values()]
+      const registered = [...RogerVIB.models.values()]
         .filter(model => model.alpha === true)
         .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+      const hasSmarter = registered.some(model => /smarter/i.test(model.name || '') || model.id === 'smarter');
+      if (!hasSmarter) registered.unshift(smarterPreview);
+      return registered;
     }
 
     function selectModel(model) {
+      if (model.previewOnly) return;
       let option = [...modelPicker.options].find(item => item.value === model.id);
       if (!option) {
         option = document.createElement('option');
@@ -37,14 +53,6 @@
     function render() {
       const models = alphaModels();
       list.innerHTML = '';
-      if (!models.length) {
-        const empty = document.createElement('div');
-        empty.className = 'beta-empty';
-        empty.textContent = 'No alpha models are available right now. Alpha is for builds that are not ready for Beta Test yet.';
-        list.appendChild(empty);
-        return;
-      }
-
       for (const model of models) {
         const card = document.createElement('article');
         card.className = 'beta-model-card alpha-model-card';
@@ -72,9 +80,14 @@
         const use = document.createElement('button');
         use.className = 'beta-use-button alpha-use-button';
         use.type = 'button';
-        use.textContent = modelPicker.value === model.id ? 'Using this alpha' : 'Test this alpha';
-        use.disabled = modelPicker.value === model.id;
-        use.addEventListener('click', () => selectModel(model));
+        if (model.previewOnly) {
+          use.textContent = 'Training…';
+          use.disabled = true;
+        } else {
+          use.textContent = modelPicker.value === model.id ? 'Using this alpha' : 'Test this alpha';
+          use.disabled = modelPicker.value === model.id;
+          use.addEventListener('click', () => selectModel(model));
+        }
 
         card.append(top, description);
         if (stats.childNodes.length) card.appendChild(stats);
