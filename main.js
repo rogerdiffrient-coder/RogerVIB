@@ -54,6 +54,7 @@
     const emptyState = document.getElementById('emptyState');
     const modelDescription = document.getElementById('modelDescription');
     const newChatButton = document.getElementById('newChatButton');
+    const copyChatButton = document.getElementById('copyChatButton');
     const collapseButton = document.getElementById('collapseButton');
     const mobileSidebarButton = document.getElementById('mobileSidebarButton');
     const sidebar = document.querySelector('.sidebar');
@@ -90,6 +91,7 @@
 
     let chats = loadChats();
     let activeChatId = localStorage.getItem(ACTIVE_CHAT_KEY);
+    let copyFeedbackTimer = null;
 
     if (!chats.length) {
       const first = createChatObject();
@@ -152,6 +154,7 @@
       modelPicker.value = chat.model;
       updateModelDescription();
       emptyState.classList.toggle('hidden', chat.messages.length > 0);
+      copyChatButton.disabled = chat.messages.length === 0;
       for (const message of chat.messages) renderMessage(message.text, message.role);
       requestAnimationFrame(() => { conversation.scrollTop = conversation.scrollHeight; });
     }
@@ -224,6 +227,53 @@
       if (window.innerWidth <= 760) sidebar.classList.remove('mobile-open');
     }
 
+    function transcriptFor(chat) {
+      return chat.messages.map(message => {
+        const speaker = message.role === 'user' ? 'User' : 'Bot';
+        return `${speaker}: ${String(message.text)}`;
+      }).join('\n');
+    }
+
+    async function writeClipboard(text) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const fallback = document.createElement('textarea');
+      fallback.value = text;
+      fallback.setAttribute('readonly', '');
+      fallback.style.position = 'fixed';
+      fallback.style.opacity = '0';
+      document.body.appendChild(fallback);
+      fallback.select();
+      const copied = document.execCommand('copy');
+      fallback.remove();
+      if (!copied) throw new Error('Clipboard copy failed');
+    }
+
+    function showCopyFeedback(label) {
+      window.clearTimeout(copyFeedbackTimer);
+      copyChatButton.textContent = label;
+      copyFeedbackTimer = window.setTimeout(() => {
+        copyChatButton.textContent = 'Copy Chat';
+      }, 1400);
+    }
+
+    async function copyCurrentChat() {
+      const chat = activeChat();
+      if (!chat?.messages.length) {
+        showCopyFeedback('Nothing to copy');
+        return;
+      }
+      try {
+        await writeClipboard(transcriptFor(chat));
+        showCopyFeedback('Copied!');
+      } catch (error) {
+        console.error('Copy chat failed:', error);
+        showCopyFeedback('Copy failed');
+      }
+    }
+
     async function sendMessage() {
       const text = messageInput.value.trim();
       const chat = activeChat();
@@ -271,6 +321,7 @@
       }
     });
     newChatButton.addEventListener('click', createNewChat);
+    copyChatButton.addEventListener('click', copyCurrentChat);
     modelPicker.addEventListener('change', () => {
       const chat = activeChat();
       if (!chat) return;
