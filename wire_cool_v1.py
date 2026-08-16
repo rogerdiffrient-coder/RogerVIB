@@ -28,9 +28,10 @@ index = re.sub(r'v=0\.4\.\d+', f'v={VERSION}', index)
 index = re.sub(r'v=0\.5\.\d+', f'v={VERSION}', index)
 
 # Remove any previous Cool/Smarter tool wiring before inserting the canonical block.
-index = re.sub(r'\n\s*<!-- RogerVIB v0\.5 Cool tools \+ weights -->.*?<!-- End Cool v0\.5 -->\s*', '\n', index, flags=re.S)
-index = re.sub(r'\n\s*<!-- RogerVIB v0\.6 Smarter tools \+ weights -->.*?<!-- End Smarter v0\.6 -->\s*', '\n', index, flags=re.S)
-index = re.sub(r'\n\s*<script src="models/cool\.js[^>]*></script>\s*', '\n', index)
+# Important: don't depend on indentation around the next HTML comment.
+index = re.sub(r'\n\s*<!-- RogerVIB v0\.5 Cool tools \+ weights -->.*?<!-- End Cool v0\.5 -->[ \t]*\n?', '\n', index, flags=re.S)
+index = re.sub(r'\n\s*<!-- RogerVIB v0\.6 Smarter tools \+ weights -->.*?<!-- End Smarter v0\.6 -->[ \t]*\n?', '\n', index, flags=re.S)
+index = re.sub(r'\n\s*<script src="models/cool\.js[^>]*></script>[ \t]*\n?', '\n', index)
 
 cool_block = f'''\n  <!-- RogerVIB v0.6 Smarter tools + weights -->
   <script src="tools/tools.js?v={VERSION}"></script>
@@ -39,12 +40,12 @@ cool_block = f'''\n  <!-- RogerVIB v0.6 Smarter tools + weights -->
   <script src="cool-v1-loader.js?v={VERSION}"></script>
   <!-- End Smarter v0.6 -->
 '''
-marker = '  <!-- Brah\'s trained intent weights remain for the older model/fallback. -->'
-if marker not in index:
-    marker = '  <!-- Brah keeps its compiled learned intent weights separate too. -->'
-if marker not in index:
-    raise SystemExit('Could not find Brah model marker in index.html')
-index = index.replace(marker, cool_block + '\n' + marker, 1)
+
+# Anchor on the Brah model script instead of a fragile exact comment/indentation string.
+brah_match = re.search(r'(?m)^\s*<script src="brah-model\.js\?v=[^"]+"></script>', index)
+if not brah_match:
+    raise SystemExit('Could not find Brah model script in index.html')
+index = index[:brah_match.start()] + cool_block + '\n' + index[brah_match.start():]
 
 # Load the upgraded model after Decent so its larger order value places it first in the picker.
 decent_match = re.search(r'\s*<script src="models/decent\.js\?v=[^"]+"></script>', index)
