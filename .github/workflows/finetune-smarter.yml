@@ -1,0 +1,72 @@
+name: Fine-tune Smarter
+
+on:
+  workflow_dispatch:
+    inputs:
+      epochs:
+        description: Fine-tune epochs
+        required: false
+        default: '1'
+      learning_rate:
+        description: Learning rate
+        required: false
+        default: '0.00005'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finetune-smarter
+  cancel-in-progress: false
+
+jobs:
+  finetune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Fine-tune from deployed Smarter checkpoint
+        run: python finetune_smarter.py --epochs "${{ inputs.epochs }}" --lr "${{ inputs.learning_rate }}"
+
+      - name: Preserve fine-tuned checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-smarter-finetune
+          path: |
+            cool-v1-config.js
+            cool-v1-part*.js
+            cool-v1-manifest.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Run regression smoke tests
+        run: |
+          node test_cool_v1.js
+          node test_smarter_v1.js
+
+      - name: Commit passing fine-tune
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cool-v1-config.js cool-v1-part*.js cool-v1-manifest.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Fine-tune RogerVIB Smarter [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
