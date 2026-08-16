@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB</title>
-  <link rel="stylesheet" href="styles.css?v=0.5.0" />
+  <link rel="stylesheet" href="styles.css?v=0.5.1" />
 </head>
 <body>
   <div class="app-shell">
@@ -30,6 +30,7 @@
       <header class="topbar">
         <button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button>
         <div class="topbar-spacer"></div>
+        <button class="beta-test-button" id="betaTestButton" type="button" aria-label="Beta test experimental RogerVIB models">Beta Test</button>
         <button class="copy-chat-button" id="copyChatButton" type="button" aria-label="Copy current chat">Copy Chat</button>
       </header>
 
@@ -55,6 +56,20 @@
         <div class="disclaimer">RogerVIB can make mistakes. Especially right now.</div>
       </div>
     </main>
+  </div>
+
+  <div class="beta-modal-backdrop hidden" id="betaModalBackdrop" role="presentation">
+    <section class="beta-modal" id="betaModal" role="dialog" aria-modal="true" aria-labelledby="betaModalTitle">
+      <div class="beta-modal-header">
+        <div>
+          <div class="beta-kicker">EXPERIMENTAL</div>
+          <h2 id="betaModalTitle">Beta Test</h2>
+        </div>
+        <button class="beta-close-button" id="betaCloseButton" type="button" aria-label="Close beta test">×</button>
+      </div>
+      <p class="beta-intro">Try unfinished RogerVIB models before they become stable. They may be slower, stranger, or occasionally decide the answer is 4243.</p>
+      <div class="beta-model-list" id="betaModelList"></div>
+    </section>
   </div>
 
   <!-- Decent v2: generated config + 12 int8/base64 weight chunks. -->
@@ -84,7 +99,7 @@
   <script src="brah-model.js?v=0.5.0"></script>
 
   <!-- Shared app first, then each independently registered model. -->
-  <script src="main.js?v=0.5.0"></script>
+  <script src="main.js?v=0.5.1"></script>
   <script src="models/brick.js?v=0.5.0"></script>
   <script src="models/spark.js?v=0.5.0"></script>
   <script src="models/ember.js?v=0.5.0"></script>
