@@ -1,4 +1,4 @@
-// RogerVIB beta-testing UI. Experimental models opt in with `beta: true` or `experimental: true`.
+// RogerVIB beta-testing UI. Beta models opt in with `beta: true` (or legacy `experimental: true`).
 (() => {
   window.addEventListener('DOMContentLoaded', () => {
     const openButton = document.getElementById('betaTestButton');
@@ -10,12 +10,11 @@
 
     function experimentalModels() {
       return [...RogerVIB.models.values()]
-        .filter(model => model.beta === true || model.experimental === true)
+        .filter(model => model.alpha !== true && (model.beta === true || model.experimental === true))
         .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
     }
 
     function selectModel(model) {
-      // Use the existing picker so RogerVIB's normal per-chat model switching stays in charge.
       let option = [...modelPicker.options].find(item => item.value === model.id);
       if (!option) {
         option = document.createElement('option');
@@ -31,11 +30,10 @@
     function render() {
       const betaModels = experimentalModels();
       list.innerHTML = '';
-
       if (!betaModels.length) {
         const empty = document.createElement('div');
         empty.className = 'beta-empty';
-        empty.textContent = 'No beta models are available right now. When an experimental build passes its tests, it can appear here without replacing the stable model.';
+        empty.textContent = 'No beta models are available right now. Alpha builds can live in Alpha Test until they are ready for this page.';
         list.appendChild(empty);
         return;
       }
@@ -43,7 +41,6 @@
       for (const model of betaModels) {
         const card = document.createElement('article');
         card.className = 'beta-model-card';
-
         const top = document.createElement('div');
         top.className = 'beta-model-card-top';
         const name = document.createElement('div');
@@ -53,41 +50,25 @@
         badge.className = 'beta-badge';
         badge.textContent = 'BETA';
         top.append(name, badge);
-
         const description = document.createElement('div');
         description.className = 'beta-model-description';
         description.textContent = model.description || 'Experimental RogerVIB model.';
-
         const use = document.createElement('button');
         use.className = 'beta-use-button';
         use.type = 'button';
         use.textContent = modelPicker.value === model.id ? 'Using this beta' : 'Test this model';
         use.disabled = modelPicker.value === model.id;
         use.addEventListener('click', () => selectModel(model));
-
         card.append(top, description, use);
         list.appendChild(card);
       }
     }
 
-    function open() {
-      render();
-      backdrop.classList.remove('hidden');
-      closeButton.focus();
-    }
-
-    function close() {
-      backdrop.classList.add('hidden');
-      openButton.focus();
-    }
-
+    function open() { render(); backdrop.classList.remove('hidden'); closeButton.focus(); }
+    function close() { backdrop.classList.add('hidden'); openButton.focus(); }
     openButton.addEventListener('click', open);
     closeButton.addEventListener('click', close);
-    backdrop.addEventListener('click', event => {
-      if (event.target === backdrop) close();
-    });
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && !backdrop.classList.contains('hidden')) close();
-    });
+    backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !backdrop.classList.contains('hidden')) close(); });
   });
 })();
