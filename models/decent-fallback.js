@@ -1,21 +1,31 @@
 // RogerVIB v0.4 Decent registration safety net.
-// If the real Transformer failed to load, keep Decent visible and fall back to Brah
-// instead of silently deleting the newest model from the picker.
+// Keeps Decent visible while its trained weights load, then lets the real model
+// replace this temporary entry as soon as DECENT_MODEL_READY resolves.
 (() => {
   if (!window.RogerVIB || RogerVIB.models.has('decent')) return;
-
-  const reason = window.DECENT_MODEL_LOAD_ERROR || 'Decent Transformer runtime did not register';
-  console.error('Decent fallback active:', reason);
 
   RogerVIB.registerModel({
     id: 'decent',
     name: 'Decent',
     order: 40,
-    description: 'RogerVIB v0.4 Decent — Transformer failed to load; temporarily falling back to Brah.',
+    description: 'RogerVIB v0.4 Decent — loading Transformer weights…',
     async reply(input, context) {
+      const model = await window.DECENT_MODEL_READY;
+      const real = RogerVIB.getModel('decent');
+      if (model && real && real.reply !== this.reply) return real.reply(input, context);
       const brah = RogerVIB.getModel('brah');
       if (brah && brah.id !== 'decent') return brah.reply(input, context);
-      return `my Decent brain failed to load: ${reason}`;
+      return 'my Decent brain failed to load';
+    }
+  });
+
+  window.addEventListener('rogervib:decent-ready', () => {
+    // The real Decent model has now replaced the temporary registry entry.
+    // Refresh the visible description if Decent is currently selected.
+    const picker = document.getElementById('modelPicker');
+    const description = document.getElementById('modelDescription');
+    if (picker?.value === 'decent' && description) {
+      description.textContent = RogerVIB.getModel('decent')?.description || '';
     }
   });
 })();
