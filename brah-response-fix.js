@@ -28,6 +28,65 @@ const BRAH_UNKNOWN_STATEMENTS = [
   'i have no idea what you want me to do with that'
 ];
 
+// Factual lookup lives outside the neural intent classifier. Brah was trained
+// with "capital of France -> Paris", so without this layer it can overgeneralize
+// "capital of ___" into the capital_france intent. That is not intelligence.
+const BRAH_CAPITALS = {
+  'usa': 'washington, d.c.',
+  'us': 'washington, d.c.',
+  'u s': 'washington, d.c.',
+  'united states': 'washington, d.c.',
+  'united states of america': 'washington, d.c.',
+  'america': 'washington, d.c.',
+  'france': 'paris',
+  'uk': 'london',
+  'united kingdom': 'london',
+  'england': 'london',
+  'canada': 'ottawa',
+  'mexico': 'mexico city',
+  'japan': 'tokyo',
+  'china': 'beijing',
+  'india': 'new delhi',
+  'australia': 'canberra',
+  'germany': 'berlin',
+  'italy': 'rome',
+  'spain': 'madrid',
+  'brazil': 'brasilia',
+  'argentina': 'buenos aires',
+  'russia': 'moscow',
+  'south korea': 'seoul',
+  'north korea': 'pyongyang',
+  'egypt': 'cairo',
+  'ireland': 'dublin',
+  'new zealand': 'wellington',
+  'sweden': 'stockholm',
+  'norway': 'oslo',
+  'finland': 'helsinki',
+  'denmark': 'copenhagen',
+  'switzerland': 'bern',
+  'austria': 'vienna',
+  'greece': 'athens',
+  'portugal': 'lisbon',
+  'poland': 'warsaw',
+  'ukraine': 'kyiv',
+  'turkey': 'ankara'
+};
+
+function brahCapitalLookup(input) {
+  const n = normalize(input)
+    .replace(/^what is /, '')
+    .replace(/^whats /, '')
+    .replace(/^what s /, '')
+    .replace(/^the /, '');
+
+  const match = n.match(/^(?:capital|capital city) of (?:the )?(.+?)$/);
+  if (!match) return null;
+
+  const country = match[1].trim();
+  if (BRAH_CAPITALS[country]) return BRAH_CAPITALS[country];
+  return 'idk that capital yet';
+}
+
 function brahLooksLikeUrl(input) {
   return /^(https?:\/\/|www\.)\S+$/i.test(input.trim());
 }
@@ -47,6 +106,10 @@ getBrahReply = function(input) {
     }
     return 'thats a link. i cant open links yet';
   }
+
+  // Deterministic factual lookup before intent classification.
+  const capital = brahCapitalLookup(trimmed);
+  if (capital !== null) return capital;
 
   // These ultra-common phrasings are also useful sanity checks around the
   // trained classifier. The network still handles paraphrases; these just make
