@@ -1,0 +1,23 @@
+name: Test Decent v2
+
+on:
+  push:
+    paths:
+      - 'models/decent.js'
+      - 'decent-v2-config.js'
+      - 'decent-v2-part*.js'
+      - 'test_decent_v2.js'
+      - '.github/workflows/test-decent-v2.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run Decent v2 inference smoke test
+        run: node test_decent_v2.js
