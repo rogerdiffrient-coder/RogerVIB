@@ -1,0 +1,24 @@
+name: Test Cool v1
+
+on:
+  push:
+    paths:
+      - 'cool-v1-config.js'
+      - 'cool-v1-part*.js'
+      - 'cool-v1-manifest.json'
+      - 'models/cool.js'
+      - 'test_cool_v1.js'
+      - '.github/workflows/test-cool-v1.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Cool v0.5 inference + tool smoke test
+        run: node test_cool_v1.js
