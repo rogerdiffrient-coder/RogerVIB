@@ -230,7 +230,7 @@
     function transcriptFor(chat) {
       return chat.messages.map(message => {
         const speaker = message.role === 'user' ? 'User' : 'Bot';
-        return `${speaker}: ${String(message.text)}`;
+        return `${speaker}:  ${String(message.text)}`;
       }).join('\n');
     }
 
