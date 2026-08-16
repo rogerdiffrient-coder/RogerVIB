@@ -34,5 +34,11 @@ if old_desc not in text:
     raise SystemExit('Could not find model description anchor in models/cool.js')
 text = text.replace(old_desc, new_desc, 1)
 
+old_reg = "id: 'cool', name: 'Cool', order: 50,"
+new_reg = "id: 'cool', name: 'Smarter', order: 60, alpha: true, params: M.params, context: M.context, status: 'alpha', knownIssues: 'experimental; may be slower or say weird things',"
+if old_reg not in text:
+    raise SystemExit('Could not find model registration anchor in models/cool.js')
+text = text.replace(old_reg, new_reg, 1)
+
 path.write_text(text)
-print('Prepared v0.6 Smarter runtime with evidence-grounding fallback and updated model description.')
+print('Prepared v0.6 Smarter runtime with evidence grounding and Alpha Test metadata.')
