@@ -1,69 +1,88 @@
-// RogerVIB v0.4 Decent
-// First genuinely generative RogerVIB model: a tiny decoder-only Transformer
-// trained from random weights on 10,000 RogerVIB conversation examples.
-
-(async () => {
-  const M = window.DECENT_MODEL || await window.DECENT_MODEL_READY;
-  if (!M) {
-    console.error('Decent weights failed to load:', window.DECENT_MODEL_LOAD_ERROR);
+// RogerVIB v0.4 Decent v2
+// 1.25M-parameter, 4-layer subword decoder-only Transformer.
+// Trained from random weights on 10,000 RogerVIB examples and quantized to int8.
+(() => {
+  const M = window.DECENT_V2_CONFIG;
+  const parts = window.DECENT_V2_PARTS || [];
+  if (!M || !parts.length) {
+    console.error('Decent v2 weights/config are missing');
     return;
   }
 
-  const W = {};
-  const vocab = M.vocab;
-  const stoi = new Map(vocab.map((ch, i) => [ch, i]));
   const D = M.dModel;
   const H = M.heads;
   const HD = D / H;
+  const CTX = M.context;
+  const vocab = M.vocab;
+  const stoi = new Map(vocab.map((token, i) => [token, i]));
+  const BOS = stoi.get('<bos>');
+  const EOS = stoi.get('<eos>');
+  const USER = stoi.get('<user>');
+  const ASSISTANT = stoi.get('<assistant>');
+  const UNK = stoi.get('<unk>');
+  const WORD_START = stoi.get('▁');
 
-  function decodeTensor(name) {
-    if (W[name]) return W[name];
+  // The generated chunks contain only base64, split on valid base64 boundaries.
+  const encoded = parts.join('');
+  const binary = atob(encoded);
+  const raw = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) raw[i] = binary.charCodeAt(i);
+  delete window.DECENT_V2_PARTS;
+
+  const decoded = new Map();
+  function tensor(name) {
+    if (decoded.has(name)) return decoded.get(name);
     const spec = M.tensors[name];
-    const raw = atob(spec.data);
-    const out = new Float32Array(raw.length);
-    for (let i = 0; i < raw.length; i++) {
-      const byte = raw.charCodeAt(i);
-      const signed = byte > 127 ? byte - 256 : byte;
-      out[i] = signed * spec.scale;
+    if (!spec) throw new Error(`Missing Decent tensor: ${name}`);
+    const out = new Float32Array(spec.length);
+    for (let i = 0; i < spec.length; i++) {
+      const byte = raw[spec.offset + i];
+      out[i] = (byte > 127 ? byte - 256 : byte) * spec.scale;
     }
-    W[name] = { data: out, shape: spec.shape };
-    return W[name];
+    const value = { data: out, shape: spec.shape };
+    decoded.set(name, value);
+    return value;
   }
 
   function layerNorm(input, weightName, biasName) {
-    const g = decodeTensor(weightName).data;
-    const b = decodeTensor(biasName).data;
-    const out = new Float32Array(input.length);
+    const g = tensor(weightName).data;
+    const b = tensor(biasName).data;
     let mean = 0;
     for (let i = 0; i < input.length; i++) mean += input[i];
     mean /= input.length;
     let variance = 0;
     for (let i = 0; i < input.length; i++) {
-      const d = input[i] - mean;
-      variance += d * d;
+      const delta = input[i] - mean;
+      variance += delta * delta;
     }
     variance /= input.length;
     const inv = 1 / Math.sqrt(variance + 1e-5);
+    const out = new Float32Array(input.length);
     for (let i = 0; i < input.length; i++) out[i] = (input[i] - mean) * inv * g[i] + b[i];
     return out;
   }
 
   function linear(input, weightName, biasName = null) {
-    const weight = decodeTensor(weightName);
+    const weight = tensor(weightName);
     const [rows, cols] = weight.shape;
-    const bias = biasName ? decodeTensor(biasName).data : null;
+    const bias = biasName ? tensor(biasName).data : null;
     const out = new Float32Array(rows);
-    for (let r = 0; r < rows; r++) {
-      let sum = bias ? bias[r] : 0;
-      const base = r * cols;
-      for (let c = 0; c < cols; c++) sum += weight.data[base + c] * input[c];
-      out[r] = sum;
+    for (let row = 0; row < rows; row++) {
+      let sum = bias ? bias[row] : 0;
+      const base = row * cols;
+      for (let col = 0; col < cols; col++) sum += weight.data[base + col] * input[col];
+      out[row] = sum;
     }
     return out;
   }
 
-  function gelu(x) {
-    return 0.5 * x * (1 + Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x)));
+  function embedding(name, row) {
+    const table = tensor(name);
+    const width = table.shape[1];
+    const out = new Float32Array(width);
+    const base = row * width;
+    for (let i = 0; i < width; i++) out[i] = table.data[base + i];
+    return out;
   }
 
   function add(a, b) {
@@ -72,129 +91,175 @@
     return out;
   }
 
-  function embeddingRow(tensorName, row) {
-    const tensor = decodeTensor(tensorName);
-    const cols = tensor.shape[1];
-    const out = new Float32Array(cols);
-    const base = row * cols;
-    for (let i = 0; i < cols; i++) out[i] = tensor.data[base + i];
-    return out;
+  function gelu(x) {
+    // Standard fast GELU approximation; close to PyTorch's exact GELU at this scale.
+    return 0.5 * x * (1 + Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x)));
   }
 
-  function forwardLast(ids) {
-    const seq = ids.slice(-M.context);
-    const T = seq.length;
-    let x = new Array(T);
+  const subwordCandidates = new Map();
+  for (const token of vocab) {
+    if (!token || token.startsWith('<') || token.startsWith('▁')) continue;
+    const first = token[0];
+    if (!subwordCandidates.has(first)) subwordCandidates.set(first, []);
+    subwordCandidates.get(first).push(token);
+  }
+  for (const list of subwordCandidates.values()) list.sort((a, b) => b.length - a.length);
 
-    for (let t = 0; t < T; t++) {
-      x[t] = add(embeddingRow('tok.weight', seq[t]), embeddingRow('pos.weight', t));
+  function encode(text) {
+    const pieces = String(text).toLowerCase().match(/[a-z0-9]+|[^\s]/g) || [];
+    const ids = [];
+    for (const piece of pieces) {
+      const whole = `▁${piece}`;
+      if (stoi.has(whole)) {
+        ids.push(stoi.get(whole));
+        continue;
+      }
+      if (/^[a-z0-9]+$/.test(piece)) {
+        ids.push(WORD_START);
+        let cursor = 0;
+        while (cursor < piece.length) {
+          const candidates = subwordCandidates.get(piece[cursor]) || [];
+          let found = null;
+          for (const token of candidates) {
+            if (piece.startsWith(token, cursor)) {
+              found = token;
+              break;
+            }
+          }
+          if (found) {
+            ids.push(stoi.get(found));
+            cursor += found.length;
+          } else {
+            ids.push(stoi.get(piece[cursor]) ?? UNK);
+            cursor += 1;
+          }
+        }
+      } else {
+        ids.push(stoi.get(piece) ?? UNK);
+      }
     }
+    return ids;
+  }
 
-    const norm1 = x.map(v => layerNorm(v, 'b.l1.weight', 'b.l1.bias'));
-    const q = new Array(T), k = new Array(T), v = new Array(T);
-    for (let t = 0; t < T; t++) {
-      const qkv = linear(norm1[t], 'b.q.weight', 'b.q.bias');
-      q[t] = qkv.slice(0, D);
-      k[t] = qkv.slice(D, D * 2);
-      v[t] = qkv.slice(D * 2, D * 3);
+  function decode(ids) {
+    let text = '';
+    for (const id of ids) {
+      const token = vocab[id];
+      if (!token || token.startsWith('<')) continue;
+      if (token.startsWith('▁')) {
+        const word = token.slice(1);
+        if (word) text += `${text ? ' ' : ''}${word}`;
+      } else {
+        text += token;
+      }
     }
+    return text.trim();
+  }
 
-    const attnOut = new Array(T);
-    const scale = 1 / Math.sqrt(HD);
-    for (let t = 0; t < T; t++) {
+  function makeCaches() {
+    return Array.from({ length: M.layers }, () => ({
+      k: new Float32Array(CTX * D),
+      v: new Float32Array(CTX * D)
+    }));
+  }
+
+  // One autoregressive token step with a KV cache. Prompt tokens are prefetched once;
+  // generated tokens then reuse all prior keys/values instead of rerunning the model.
+  function step(tokenId, position, caches) {
+    let x = add(embedding('tok.weight', tokenId), embedding('pos.weight', position));
+    const attnScale = 1 / Math.sqrt(HD);
+
+    for (let layer = 0; layer < M.layers; layer++) {
+      const prefix = `blocks.${layer}`;
+      const n1 = layerNorm(x, `${prefix}.l1.weight`, `${prefix}.l1.bias`);
+      const qkv = linear(n1, `${prefix}.q.weight`, `${prefix}.q.bias`);
+      const q = qkv.subarray(0, D);
+      const k = qkv.subarray(D, D * 2);
+      const v = qkv.subarray(D * 2, D * 3);
+      const cache = caches[layer];
+      cache.k.set(k, position * D);
+      cache.v.set(v, position * D);
+
       const merged = new Float32Array(D);
-      for (let h = 0; h < H; h++) {
-        const offset = h * HD;
-        const scores = new Float32Array(t + 1);
+      for (let head = 0; head < H; head++) {
+        const headOffset = head * HD;
+        const scores = new Float32Array(position + 1);
         let max = -Infinity;
-        for (let j = 0; j <= t; j++) {
-          let s = 0;
-          for (let d = 0; d < HD; d++) s += q[t][offset + d] * k[j][offset + d];
-          s *= scale;
-          scores[j] = s;
-          if (s > max) max = s;
+        for (let past = 0; past <= position; past++) {
+          const cacheBase = past * D + headOffset;
+          let score = 0;
+          for (let d = 0; d < HD; d++) score += q[headOffset + d] * cache.k[cacheBase + d];
+          score *= attnScale;
+          scores[past] = score;
+          if (score > max) max = score;
         }
         let total = 0;
-        for (let j = 0; j <= t; j++) {
-          scores[j] = Math.exp(scores[j] - max);
-          total += scores[j];
+        for (let past = 0; past <= position; past++) {
+          scores[past] = Math.exp(scores[past] - max);
+          total += scores[past];
         }
-        for (let j = 0; j <= t; j++) {
-          const p = scores[j] / total;
-          for (let d = 0; d < HD; d++) merged[offset + d] += p * v[j][offset + d];
+        for (let past = 0; past <= position; past++) {
+          const probability = scores[past] / total;
+          const cacheBase = past * D + headOffset;
+          for (let d = 0; d < HD; d++) merged[headOffset + d] += probability * cache.v[cacheBase + d];
         }
       }
-      attnOut[t] = add(x[t], linear(merged, 'b.p.weight', 'b.p.bias'));
-    }
 
-    for (let t = 0; t < T; t++) {
-      const n2 = layerNorm(attnOut[t], 'b.l2.weight', 'b.l2.bias');
-      const hidden = linear(n2, 'b.f1.weight', 'b.f1.bias');
+      x = add(x, linear(merged, `${prefix}.p.weight`, `${prefix}.p.bias`));
+      const n2 = layerNorm(x, `${prefix}.l2.weight`, `${prefix}.l2.bias`);
+      const hidden = linear(n2, `${prefix}.f1.weight`, `${prefix}.f1.bias`);
       for (let i = 0; i < hidden.length; i++) hidden[i] = gelu(hidden[i]);
-      x[t] = add(attnOut[t], linear(hidden, 'b.f2.weight', 'b.f2.bias'));
+      x = add(x, linear(hidden, `${prefix}.f2.weight`, `${prefix}.f2.bias`));
     }
 
-    const last = layerNorm(x[T - 1], 'lf.weight', 'lf.bias');
-    return linear(last, 'head.weight');
+    const final = layerNorm(x, 'lf.weight', 'lf.bias');
+    return linear(final, 'head.weight');
   }
 
-  function encodePrompt(input) {
-    const text = `¤${String(input).toLowerCase()}§`;
-    const ids = [];
-    for (const ch of text) {
-      if (stoi.has(ch)) ids.push(stoi.get(ch));
-      else if (stoi.has(' ')) ids.push(stoi.get(' '));
+  function argmax(logits) {
+    let best = 0;
+    let value = -Infinity;
+    for (let i = 0; i < logits.length; i++) {
+      if (logits[i] > value) {
+        value = logits[i];
+        best = i;
+      }
     }
-    return ids.slice(-M.context);
+    return best;
   }
 
   function generate(input) {
-    const ids = encodePrompt(input);
-    let output = '';
-    for (let step = 0; step < 120; step++) {
-      const logits = forwardLast(ids);
-      let best = 1;
-      let bestValue = -Infinity;
-      for (let i = 1; i < logits.length; i++) {
-        if (logits[i] > bestValue) {
-          bestValue = logits[i];
-          best = i;
-        }
-      }
-      const ch = vocab[best];
-      if (ch === '¶') break;
-      if (ch === '¤' || ch === '§' || ch === '<pad>') break;
-      output += ch;
-      ids.push(best);
-      if (ids.length > M.context) ids.shift();
+    let prompt = [BOS, USER, ...encode(input), ASSISTANT];
+    // Keep BOS/USER and the newest prompt tokens when a weirdly long input exceeds context.
+    if (prompt.length > CTX - 2) prompt = [BOS, USER, ...prompt.slice(-(CTX - 4)), ASSISTANT];
+
+    const caches = makeCaches();
+    let logits = null;
+    let position = 0;
+    for (const id of prompt) {
+      logits = step(id, position, caches);
+      position += 1;
+      if (position >= CTX) break;
     }
-    return output.trim();
+
+    const output = [];
+    const maxNew = Math.min(36, CTX - position);
+    for (let i = 0; i < maxNew; i++) {
+      const next = argmax(logits);
+      if (next === EOS || next === BOS || next === USER || next === ASSISTANT) break;
+      output.push(next);
+      if (position >= CTX) break;
+      logits = step(next, position, caches);
+      position += 1;
+    }
+    return decode(output);
   }
 
-  const CAPITALS = {
-    'usa':'washington, d.c.','united states':'washington, d.c.','france':'paris','canada':'ottawa','mexico':'mexico city',
-    'japan':'tokyo','china':'beijing','india':'new delhi','australia':'canberra','germany':'berlin','italy':'rome',
-    'spain':'madrid','brazil':'brasilia','argentina':'buenos aires','russia':'moscow','south korea':'seoul','egypt':'cairo',
-    'ireland':'dublin','new zealand':'wellington','sweden':'stockholm','norway':'oslo','finland':'helsinki','denmark':'copenhagen',
-    'switzerland':'bern','austria':'vienna','greece':'athens','portugal':'lisbon','poland':'warsaw','ukraine':'kyiv','turkey':'ankara',
-    'united kingdom':'london','uk':'london'
-  };
-
-  function factualTool(input) {
-    const n = RogerVIB.normalize(input).replace(/^what is /,'').replace(/^whats /,'');
-    const cap = n.match(/^capital of (?:the )?(.+)$/);
-    if (cap) return CAPITALS[cap[1]] || 'idk that capital yet';
-    return null;
-  }
-
-  function looksBad(text) {
-    if (!text || text.length < 1) return true;
-    if (text.length > 115) return true;
-    const words = text.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length >= 6) {
-      const unique = new Set(words).size;
-      if (unique / words.length < 0.35) return true;
-    }
+  function looksBroken(text) {
+    if (!text) return true;
+    if (text.length > 180) return true;
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length > 8 && new Set(words).size / words.length < 0.35) return true;
     return false;
   }
 
@@ -202,20 +267,18 @@
     id: 'decent',
     name: 'Decent',
     order: 40,
-    description: `RogerVIB v0.4 Decent — a ${M.params.toLocaleString()}-parameter decoder-only Transformer trained from scratch on ${M.trainingExamples.toLocaleString()} examples.`,
+    description: `RogerVIB v0.4 Decent — ${M.params.toLocaleString()}-parameter, ${M.layers}-layer subword Transformer trained from scratch on ${M.trainingExamples.toLocaleString()} examples.`,
     async reply(input, context) {
       const math = RogerVIB.simpleMath(input);
       if (math !== null) return math;
-      const fact = factualTool(input);
-      if (fact !== null) return fact;
-
-      const generated = generate(input);
-      if (!looksBad(generated)) return generated;
-
+      try {
+        const generated = generate(input);
+        if (!looksBroken(generated)) return generated;
+      } catch (error) {
+        console.error('Decent v2 inference failed:', error);
+      }
       const brah = RogerVIB.getModel('brah');
-      return brah ? brah.reply(input, context) : 'my language model fell down';
+      return brah ? brah.reply(input, context) : 'my larger brain fell down';
     }
   });
-
-  window.dispatchEvent(new CustomEvent('rogervib:decent-ready'));
 })();
