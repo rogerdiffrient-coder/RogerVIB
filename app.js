@@ -15,11 +15,11 @@ const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
 const BRICK_REPLY = 'bru i have no brain what do you expect from me';
 
 const MODEL_INFO = {
+  ember: 'RogerVIB v0.2 Ember — Markov brain trained on 250 RogerVIB-style responses.',
   spark: 'RogerVIB v0.1 Spark — trained on 50 approved answers.',
   brick: 'RogerVIB v0.0 Brick — absolutely no brain installed.'
 };
 
-// RogerVIB v0.1 Spark's first brain: approved Roger-style answers.
 const SPARK_DATA = [
   ['hi who are you', 'i am rogervib your ai assis- *he then was shot 47 times*'],
   ['what is 2 plus 2', '4.'],
@@ -74,33 +74,35 @@ const SPARK_DATA = [
 ];
 
 const STOP_WORDS = new Set(['a','an','the','is','are','am','i','you','me','my','your','to','of','in','on','for','and','or','do','does','did','what','whats','if','it','this','that','be','with','from','then','user','say','says']);
+const EMBER_CORPUS = [
+  ...SPARK_DATA.map(item => item[1]).filter(text => !text.startsWith('__')),
+  ...(window.EMBER_EXTRA || [])
+];
+const EMBER_MARKOV = buildMarkov(EMBER_CORPUS);
 
 let chats = loadChats();
 let activeChatId = localStorage.getItem(ACTIVE_CHAT_KEY);
 
 if (!chats.length) {
-  const first = createChatObject('spark');
+  const first = createChatObject('ember');
   chats.push(first);
   activeChatId = first.id;
   saveChats();
 }
 
-if (!chats.some(chat => chat.id === activeChatId)) {
-  activeChatId = chats[0].id;
-}
+if (!chats.some(chat => chat.id === activeChatId)) activeChatId = chats[0].id;
 
 function makeId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function createChatObject(model = 'spark') {
-  return {
-    id: makeId(),
-    title: 'New conversation',
-    model,
-    messages: []
-  };
+function validModel(model) {
+  return ['ember', 'spark', 'brick'].includes(model) ? model : 'ember';
+}
+
+function createChatObject(model = 'ember') {
+  return { id: makeId(), title: 'New conversation', model: validModel(model), messages: [] };
 }
 
 function loadChats() {
@@ -110,7 +112,7 @@ function loadChats() {
     return parsed.map(chat => ({
       id: chat.id || makeId(),
       title: chat.title || 'New conversation',
-      model: chat.model === 'brick' ? 'brick' : 'spark',
+      model: validModel(chat.model),
       messages: Array.isArray(chat.messages) ? chat.messages : []
     }));
   } catch {
@@ -139,12 +141,10 @@ function similarity(input, prompt) {
   const a = tokens(input);
   const b = tokens(prompt);
   if (!a.length || !b.length) return 0;
-
   const aSet = new Set(a);
   const bSet = new Set(b);
   let shared = 0;
   for (const word of aSet) if (bSet.has(word)) shared += 1;
-
   const union = new Set([...aSet, ...bSet]).size || 1;
   let score = shared / union;
   const ni = normalize(input);
@@ -157,7 +157,6 @@ function similarity(input, prompt) {
 function getSparkReply(input) {
   let bestScore = -1;
   let best = [];
-
   for (const item of SPARK_DATA) {
     const score = similarity(input, item[0]);
     if (score > bestScore + 0.0001) {
@@ -167,19 +166,138 @@ function getSparkReply(input) {
       best.push(item);
     }
   }
-
   const selected = bestScore > 0
     ? best[Math.floor(Math.random() * best.length)]
     : SPARK_DATA[Math.floor(Math.random() * SPARK_DATA.length)];
-
-  if (selected[1] === '__RANDOM_1_100__') {
-    return String(Math.floor(Math.random() * 100) + 1);
-  }
+  if (selected[1] === '__RANDOM_1_100__') return String(Math.floor(Math.random() * 100) + 1);
   return selected[1];
 }
 
+function markovTokens(text) {
+  return text.match(/[A-Za-z0-9^+*'_’-]+|[.,!?]/g) || [];
+}
+
+function pushMap(map, key, value) {
+  if (!map.has(key)) map.set(key, []);
+  map.get(key).push(value);
+}
+
+function buildMarkov(corpus) {
+  const pair = new Map();
+  const single = new Map();
+  const starts = [];
+  const sentences = [];
+
+  for (const sentence of corpus) {
+    const words = markovTokens(sentence);
+    if (!words.length) continue;
+    sentences.push(words);
+    starts.push(words.slice(0, Math.min(2, words.length)));
+
+    for (let i = 0; i < words.length; i += 1) {
+      const current = words[i].toLowerCase();
+      const next = i + 1 < words.length ? words[i + 1] : '__END__';
+      pushMap(single, current, next);
+      if (i > 0) {
+        const key = `${words[i - 1].toLowerCase()}\u0001${current}`;
+        pushMap(pair, key, next);
+      }
+    }
+  }
+  return { pair, single, starts, sentences };
+}
+
+function pick(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function bestSparkMatch(input) {
+  let winner = null;
+  let winnerScore = 0;
+  for (const item of SPARK_DATA) {
+    const score = similarity(input, item[0]);
+    if (score > winnerScore) {
+      winner = item;
+      winnerScore = score;
+    }
+  }
+  return { winner, score: winnerScore };
+}
+
+function formatMarkov(words) {
+  let text = '';
+  for (const word of words) {
+    if (/^[.,!?]$/.test(word)) text += word;
+    else text += `${text && !text.endsWith(' ') ? ' ' : ''}${word}`;
+  }
+  return text.trim();
+}
+
+function simpleMath(input) {
+  const cleaned = input.trim().replace(/[×x]/gi, '*').replace(/÷/g, '/');
+  const match = cleaned.match(/^(-?\d+(?:\.\d+)?)\s*([+\-*\/])\s*(-?\d+(?:\.\d+)?)\??$/);
+  if (!match) return null;
+  const a = Number(match[1]);
+  const b = Number(match[3]);
+  let result;
+  if (match[2] === '+') result = a + b;
+  if (match[2] === '-') result = a - b;
+  if (match[2] === '*') result = a * b;
+  if (match[2] === '/') result = b === 0 ? null : a / b;
+  if (result === null || !Number.isFinite(result)) return 'no. you cannot divide by zero and escape the consequences';
+  return String(Number.isInteger(result) ? result : Number(result.toFixed(8)));
+}
+
+function getEmberReply(input) {
+  if (/random number.*1.*100/i.test(input)) return String(Math.floor(Math.random() * 100) + 1);
+
+  const math = simpleMath(input);
+  if (math !== null) return math;
+
+  const match = bestSparkMatch(input);
+  let output;
+
+  if (match.winner && match.score > 0.12) {
+    const anchor = markovTokens(match.winner[1]);
+    output = anchor.slice(0, Math.min(2, anchor.length));
+  } else {
+    const inputWords = tokens(input);
+    const matchingStarts = EMBER_MARKOV.starts.filter(start =>
+      start.some(word => inputWords.includes(word.toLowerCase()))
+    );
+    output = [...pick(matchingStarts.length ? matchingStarts : EMBER_MARKOV.starts)];
+  }
+
+  if (!output.length) return 'lmao';
+
+  const maxWords = 5 + Math.floor(Math.random() * 18);
+  while (output.length < maxWords) {
+    const current = output[output.length - 1];
+    const previous = output.length > 1 ? output[output.length - 2] : null;
+    let choices = [];
+
+    if (previous) {
+      const pairKey = `${previous.toLowerCase()}\u0001${current.toLowerCase()}`;
+      choices = EMBER_MARKOV.pair.get(pairKey) || [];
+    }
+    if (!choices.length) choices = EMBER_MARKOV.single.get(current.toLowerCase()) || [];
+    if (!choices.length) break;
+
+    const next = pick(choices);
+    if (next === '__END__') {
+      if (output.length >= 2) break;
+      continue;
+    }
+    output.push(next);
+  }
+
+  return formatMarkov(output) || 'lmao';
+}
+
 function getModelReply(input, model) {
-  return model === 'brick' ? BRICK_REPLY : getSparkReply(input);
+  if (model === 'brick') return BRICK_REPLY;
+  if (model === 'spark') return getSparkReply(input);
+  return getEmberReply(input);
 }
 
 function resizeInput() {
@@ -190,14 +308,12 @@ function resizeInput() {
 function renderMessage(text, role) {
   const row = document.createElement('div');
   row.className = `message-row ${role}`;
-
   if (role === 'bot') {
     const avatar = document.createElement('div');
     avatar.className = 'bot-avatar';
     avatar.textContent = 'R';
     row.appendChild(avatar);
   }
-
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   bubble.textContent = text;
@@ -213,10 +329,8 @@ function renderConversation() {
   conversation.querySelectorAll('.message-row').forEach(node => node.remove());
   const chat = activeChat();
   if (!chat) return;
-
   modelPicker.value = chat.model;
   updateModelDescription();
-
   emptyState.classList.toggle('hidden', chat.messages.length > 0);
   for (const message of chat.messages) renderMessage(message.text, message.role);
   requestAnimationFrame(() => { conversation.scrollTop = conversation.scrollHeight; });
@@ -224,7 +338,6 @@ function renderConversation() {
 
 function renderChatList() {
   chatList.innerHTML = '';
-
   for (const chat of chats) {
     const entry = document.createElement('div');
     entry.className = `chat-entry${chat.id === activeChatId ? ' active' : ''}`;
@@ -265,12 +378,11 @@ function selectChat(id) {
 function deleteChat(id) {
   const index = chats.findIndex(chat => chat.id === id);
   if (index === -1) return;
-
   const wasActive = id === activeChatId;
   chats.splice(index, 1);
 
   if (!chats.length) {
-    const replacement = createChatObject('spark');
+    const replacement = createChatObject('ember');
     chats.push(replacement);
     activeChatId = replacement.id;
   } else if (wasActive) {
@@ -283,7 +395,7 @@ function deleteChat(id) {
 }
 
 function createNewChat() {
-  const chat = createChatObject('spark');
+  const chat = createChatObject('ember');
   chats.unshift(chat);
   activeChatId = chat.id;
   saveChats();
@@ -300,15 +412,10 @@ function sendMessage() {
   const chat = activeChat();
   if (!text || !chat) return;
 
-  // Capture the exact chat and model at send time so switching chats/models
-  // during the tiny delay cannot send a reply into the wrong conversation.
   const targetChatId = chat.id;
   const modelAtSend = chat.model;
-
   chat.messages.push({ role: 'user', text });
-  if (chat.title === 'New conversation') {
-    chat.title = text.length > 28 ? `${text.slice(0, 28)}…` : text;
-  }
+  if (chat.title === 'New conversation') chat.title = text.length > 28 ? `${text.slice(0, 28)}…` : text;
   saveChats();
   renderChatList();
   renderConversation();
