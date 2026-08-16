@@ -1,0 +1,32 @@
+.alpha-test-button {
+  border: 1px solid #5d315f;
+  background: #2a1a2c;
+  color: #e5a6ef;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 82px;
+  transition: background .15s ease, border-color .15s ease;
+}
+.alpha-test-button:hover { background: #37203a; border-color: #85508a; }
+.alpha-modal { border-color: #54315a; }
+.alpha-kicker { color: #dc8fe8; }
+.alpha-model-card { border-color: #49304d; }
+.alpha-badge { color: #28142b; background: #df91e8; }
+.alpha-use-button { border-color: #5a3a5f; }
+.alpha-use-button:hover { background: #3b293e; }
+.alpha-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.alpha-stat {
+  border: 1px solid #393939;
+  background: #222;
+  color: #aaa;
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+@media (max-width: 760px) {
+  .alpha-test-button { padding: 7px 10px; min-width: 76px; }
+}
