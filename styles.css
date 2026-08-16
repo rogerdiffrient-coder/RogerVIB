@@ -45,9 +45,11 @@ button { color: inherit; }
 .topbar { height: 58px; display: flex; align-items: center; padding: 0 18px; flex-shrink: 0; gap: 8px; }
 .topbar-spacer { flex: 1; }
 .mobile-sidebar-button { display: none; margin-right: 8px; font-size: 18px; }
-.copy-chat-button { border: 1px solid #343434; background: #222; color: #dcdcdc; border-radius: 10px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 600; min-width: 82px; transition: background .15s ease, border-color .15s ease; }
-.copy-chat-button:hover { background: #2d2d2d; border-color: #454545; }
+.copy-chat-button, .beta-test-button { border: 1px solid #343434; background: #222; color: #dcdcdc; border-radius: 10px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 600; min-width: 82px; transition: background .15s ease, border-color .15s ease; }
+.copy-chat-button:hover, .beta-test-button:hover { background: #2d2d2d; border-color: #454545; }
 .copy-chat-button:disabled { opacity: .45; cursor: default; }
+.beta-test-button { border-color: #5b4a2a; background: #29241a; color: #f4c66e; }
+.beta-test-button:hover { background: #342b1d; border-color: #80683c; }
 
 .conversation { flex: 1; overflow-y: auto; padding: 26px 20px 170px; scroll-behavior: smooth; }
 .empty-state { min-height: 55vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
@@ -85,6 +87,25 @@ textarea::placeholder { color: #a6a6a6; }
 .model-picker option { background: #242424; color: #ececec; }
 .disclaimer { text-align: center; color: #7d7d7d; font-size: 11px; margin-top: 7px; }
 
+.hidden { display: none !important; }
+.beta-modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.68); display: grid; place-items: center; padding: 20px; }
+.beta-modal { width: min(560px, 100%); max-height: min(700px, calc(100vh - 40px)); overflow: auto; background: #202020; border: 1px solid #3b3b3b; border-radius: 20px; box-shadow: 0 24px 80px rgba(0,0,0,.48); padding: 22px; }
+.beta-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.beta-modal h2 { margin: 2px 0 0; font-size: 25px; letter-spacing: -.025em; }
+.beta-kicker { font-size: 11px; font-weight: 800; letter-spacing: .13em; color: #f0b64d; }
+.beta-close-button { border: 0; background: transparent; color: #aaa; cursor: pointer; font-size: 28px; line-height: 1; width: 34px; height: 34px; border-radius: 9px; }
+.beta-close-button:hover { background: #303030; color: #fff; }
+.beta-intro { color: #aaa; line-height: 1.55; font-size: 14px; margin: 12px 0 20px; }
+.beta-model-list { display: grid; gap: 10px; }
+.beta-model-card { border: 1px solid #383838; background: #181818; border-radius: 14px; padding: 14px; display: grid; gap: 8px; }
+.beta-model-card-top { display: flex; align-items: center; gap: 8px; }
+.beta-model-name { font-weight: 750; font-size: 16px; }
+.beta-badge { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 6px; border-radius: 999px; color: #2b210f; background: #f0b64d; }
+.beta-model-description { color: #aaa; font-size: 13px; line-height: 1.45; }
+.beta-use-button { justify-self: start; border: 1px solid #444; background: #2a2a2a; border-radius: 9px; padding: 7px 11px; cursor: pointer; font-size: 13px; font-weight: 700; }
+.beta-use-button:hover { background: #353535; }
+.beta-empty { border: 1px dashed #3c3c3c; border-radius: 14px; padding: 18px; color: #9a9a9a; font-size: 13px; line-height: 1.5; text-align: center; }
+
 @media (max-width: 760px) {
   .sidebar { position: absolute; z-index: 10; height: 100%; transform: translateX(-100%); box-shadow: 8px 0 30px rgba(0,0,0,.35); }
   .sidebar.mobile-open { transform: translateX(0); }
@@ -93,5 +114,6 @@ textarea::placeholder { color: #a6a6a6; }
   .conversation { padding-left: 14px; padding-right: 14px; }
   .empty-state h1 { font-size: 25px; }
   .message-row.user .message-bubble { max-width: 84%; }
-  .copy-chat-button { padding: 7px 10px; min-width: 76px; }
+  .copy-chat-button, .beta-test-button { padding: 7px 10px; min-width: 76px; }
+  .beta-modal { padding: 18px; border-radius: 16px; }
 }
