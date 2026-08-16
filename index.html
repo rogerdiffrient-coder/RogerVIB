@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB</title>
-  <link rel="stylesheet" href="styles.css?v=0.4.4" />
+  <link rel="stylesheet" href="styles.css?v=0.4.5" />
 </head>
 <body>
   <div class="app-shell">
@@ -55,14 +55,30 @@
     </main>
   </div>
 
-  <script src="decent-model-loader.js?v=0.4.4"></script>
-  <script src="brah-model.js?v=0.4.4"></script>
-  <script src="main.js?v=0.4.4"></script>
-  <script src="models/brick.js?v=0.4.4"></script>
-  <script src="models/spark.js?v=0.4.4"></script>
-  <script src="models/ember.js?v=0.4.4"></script>
-  <script src="models/brah.js?v=0.4.4"></script>
-  <script src="models/decent.js?v=0.4.4"></script>
-  <script src="models/decent-fallback.js?v=0.4.4"></script>
+  <!-- Decent v2: generated config + 12 int8/base64 weight chunks. -->
+  <script src="decent-v2-config.js?v=0.4.5"></script>
+  <script src="decent-v2-part0.js?v=0.4.5"></script>
+  <script src="decent-v2-part1.js?v=0.4.5"></script>
+  <script src="decent-v2-part2.js?v=0.4.5"></script>
+  <script src="decent-v2-part3.js?v=0.4.5"></script>
+  <script src="decent-v2-part4.js?v=0.4.5"></script>
+  <script src="decent-v2-part5.js?v=0.4.5"></script>
+  <script src="decent-v2-part6.js?v=0.4.5"></script>
+  <script src="decent-v2-part7.js?v=0.4.5"></script>
+  <script src="decent-v2-part8.js?v=0.4.5"></script>
+  <script src="decent-v2-part9.js?v=0.4.5"></script>
+  <script src="decent-v2-part10.js?v=0.4.5"></script>
+  <script src="decent-v2-part11.js?v=0.4.5"></script>
+
+  <!-- Brah's trained intent weights remain for the older model/fallback. -->
+  <script src="brah-model.js?v=0.4.5"></script>
+
+  <!-- Shared app first, then each independently registered model. -->
+  <script src="main.js?v=0.4.5"></script>
+  <script src="models/brick.js?v=0.4.5"></script>
+  <script src="models/spark.js?v=0.4.5"></script>
+  <script src="models/ember.js?v=0.4.5"></script>
+  <script src="models/brah.js?v=0.4.5"></script>
+  <script src="models/decent.js?v=0.4.5"></script>
 </body>
 </html>
