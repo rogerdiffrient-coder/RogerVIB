@@ -37,8 +37,23 @@ jobs:
           pip install numpy
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Train v0.6 Smarter
-        run: python train_smarter_v1.py
+      - name: Train v0.6 Smarter (fast retry)
+        run: |
+          # Epoch 3 only improved average loss from ~0.0606 to ~0.0570 on the first run,
+          # so use two epochs for this recovery run instead of spending another ~75 minutes.
+          sed -i 's/^EPOCHS = 3$/EPOCHS = 2/' train_smarter_v1.py
+          python train_smarter_v1.py
+
+      - name: Preserve trained v0.6 weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v06-trained-weights
+          path: |
+            cool-v1-config.js
+            cool-v1-part*.js
+            cool-v1-manifest.json
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Prepare grounded runtime
         run: python prepare_smarter_v1.py
