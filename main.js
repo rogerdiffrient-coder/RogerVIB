@@ -4,7 +4,7 @@
 (() => {
   const STORAGE_KEY = 'rogervib_chats_v1';
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
-  const DEFAULT_MODEL = 'brah';
+  const DEFAULT_MODEL = 'decent';
   const models = new Map();
 
   function normalize(text) {
