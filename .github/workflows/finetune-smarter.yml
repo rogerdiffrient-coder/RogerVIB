@@ -10,7 +10,11 @@ on:
       learning_rate:
         description: Learning rate
         required: false
-        default: '0.00005'
+        default: '0.00003'
+  push:
+    branches: [main]
+    paths:
+      - 'finetune_data.jsonl'
 
 permissions:
   contents: write
@@ -42,31 +46,52 @@ jobs:
           pip install numpy
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Fine-tune from deployed Smarter checkpoint
-        run: python finetune_smarter.py --epochs "${{ inputs.epochs }}" --lr "${{ inputs.learning_rate }}"
+      - name: Fine-tune from deployed Smarter Alpha checkpoint
+        run: |
+          EPOCHS="${{ inputs.epochs }}"
+          LR="${{ inputs.learning_rate }}"
+          [ -n "$EPOCHS" ] || EPOCHS=1
+          [ -n "$LR" ] || LR=0.00003
+          python finetune_smarter.py --epochs "$EPOCHS" --lr "$LR"
+
+      - name: Bump Alpha cache version
+        run: |
+          python - <<'PY'
+          import os, re
+          from pathlib import Path
+          path = Path('models/smarter.js')
+          text = path.read_text()
+          version = f"0.6.0-alpha-ft-{os.environ['GITHUB_RUN_NUMBER']}"
+          text = re.sub(r"0\.6\.0-alpha(?:\.\d+|-ft-\d+)", version, text)
+          path.write_text(text)
+          print('Smarter Alpha cache version:', version)
+          PY
 
       - name: Preserve fine-tuned checkpoint
         uses: actions/upload-artifact@v4
         with:
           name: rogervib-smarter-finetune
           path: |
-            cool-v1-config.js
-            cool-v1-part*.js
-            cool-v1-manifest.json
+            smarter-v06-config.js
+            smarter-v06-part*.js
+            smarter-v06-manifest.json
+            models/smarter.js
           retention-days: 7
           if-no-files-found: error
 
-      - name: Run regression smoke tests
-        run: |
-          node test_cool_v1.js
-          node test_smarter_v1.js
+      - name: Run Smarter Alpha regression tests
+        run: node test_smarter_alpha.js
 
-      - name: Commit passing fine-tune
+      - name: Verify stable Cool was not modified
+        run: |
+          git diff --exit-code HEAD -- cool-v1-config.js cool-v1-manifest.json models/cool.js
+
+      - name: Commit passing Alpha fine-tune
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add cool-v1-config.js cool-v1-part*.js cool-v1-manifest.json
+          git add smarter-v06-config.js smarter-v06-part*.js smarter-v06-manifest.json models/smarter.js
           git diff --cached --quiet && exit 0
-          git commit -m 'Fine-tune RogerVIB Smarter [skip ci]'
-          git pull --rebase origin main
+          git commit -m 'Fine-tune RogerVIB Smarter Alpha [skip ci]'
+          git pull --rebase --autostash origin main
           git push origin HEAD:main
