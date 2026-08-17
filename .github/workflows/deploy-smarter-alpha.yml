@@ -122,19 +122,19 @@ jobs:
                 const script = document.createElement('script');
                 script.src = src;
                 script.onload = resolve;
-                script.onerror = () => reject(new Error(`Failed to load ${{src}}`));
+                script.onerror = () => reject(new Error('Failed to load ' + src));
                 document.head.appendChild(script);
               }});
             }}
 
             async function loadRealModel() {{
               if (!loadPromise) loadPromise = (async () => {{
-                await loadScript(`smarter-v06-config.js?v=${{version}}`);
+                await loadScript('smarter-v06-config.js?v=' + version);
                 const batchSize = 8;
                 for (let i = 0; i < partUrls.length; i += batchSize) {{
                   await Promise.all(partUrls.slice(i, i + batchSize).map(loadScript));
                 }}
-                await loadScript(`models/smarter-runtime.js?v=${{version}}`);
+                await loadScript('models/smarter-runtime.js?v=' + version);
                 const model = RogerVIB.getModel('smarter');
                 if (!model || model === proxy) throw new Error('Smarter runtime did not register');
                 return model;
