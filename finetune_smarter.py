@@ -12,29 +12,41 @@ from torch.utils.data import DataLoader
 import train_smarter_v1 as smarter
 import train_cool_v1 as base
 
+CONFIG_PATH = Path('smarter-v06-config.js')
+MANIFEST_PATH = Path('smarter-v06-manifest.json')
+PART_PREFIX = 'smarter-v06-part'
+CONFIG_PREFIX = 'window.SMARTER_V06_CONFIG='
+PART_GLOBAL = 'window.SMARTER_V06_PARTS'
+
 
 def load_config():
-    raw = Path('cool-v1-config.js').read_text(encoding='utf-8').strip()
-    prefix = 'window.COOL_V1_CONFIG='
-    if not raw.startswith(prefix):
-        raise SystemExit('cool-v1-config.js has an unexpected format')
-    return json.loads(raw[len(prefix):].rstrip(';\n'))
+    raw = CONFIG_PATH.read_text(encoding='utf-8').strip()
+    if not raw.startswith(CONFIG_PREFIX):
+        raise SystemExit(f'{CONFIG_PATH} has an unexpected format')
+    config = json.loads(raw[len(CONFIG_PREFIX):].rstrip(';\n'))
+    if int(config.get('params', 0)) < 10_000_000 or int(config.get('layers', 0)) < 10:
+        raise SystemExit('Refusing to fine-tune: checkpoint does not look like Smarter v0.6')
+    return config
 
 
 def load_quantized_blob(config):
-    manifest = json.loads(Path('cool-v1-manifest.json').read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text())
     pieces = []
     for i in range(int(manifest['parts'])):
-        raw = Path(f'cool-v1-part{i}.js').read_text(encoding='utf-8')
+        path = Path(f'{PART_PREFIX}{i}.js')
+        raw = path.read_text(encoding='utf-8')
         m = re.search(r'=([^;]+);\s*$', raw)
         if not m:
-            raise SystemExit(f'Could not parse cool-v1-part{i}.js')
+            raise SystemExit(f'Could not parse {path}')
         pieces.append(json.loads(m.group(1)))
-    return base64.b64decode(''.join(pieces))
+    blob = base64.b64decode(''.join(pieces))
+    expected = sum(int(meta['length']) for meta in config['tensors'].values())
+    if len(blob) != expected:
+        raise SystemExit(f'checkpoint byte length mismatch: {len(blob)} != {expected}')
+    return blob
 
 
 def restore_model(config):
-    # Keep architecture exactly compatible with the deployed Smarter checkpoint.
     base.VOCAB_SIZE = len(config['vocab'])
     base.D_MODEL = int(config['dModel'])
     base.HEADS = int(config['heads'])
@@ -126,31 +138,44 @@ def export_model(model, config, training_examples):
     config['tensors'] = tensors
     config['fineTuned'] = True
     config['lastFineTuneExamples'] = training_examples
-    Path('cool-v1-config.js').write_text('window.COOL_V1_CONFIG=' + json.dumps(config, separators=(',', ':')) + ';\n', encoding='utf-8')
+    config['fineTuneRevision'] = int(config.get('fineTuneRevision', 0)) + 1
+    CONFIG_PATH.write_text(CONFIG_PREFIX + json.dumps(config, separators=(',', ':')) + ';\n', encoding='utf-8')
 
     encoded = base64.b64encode(blob).decode('ascii')
     chunk_chars = 196_000 - (196_000 % 4)
     parts = [encoded[i:i + chunk_chars] for i in range(0, len(encoded), chunk_chars)]
-    for old in Path('.').glob('cool-v1-part*.js'):
+    for old in Path('.').glob(f'{PART_PREFIX}*.js'):
         old.unlink()
     for i, part in enumerate(parts):
-        Path(f'cool-v1-part{i}.js').write_text(
-            f'window.COOL_V1_PARTS=(window.COOL_V1_PARTS||[]);window.COOL_V1_PARTS[{i}]={json.dumps(part)};\n',
+        Path(f'{PART_PREFIX}{i}.js').write_text(
+            f'{PART_GLOBAL}=({PART_GLOBAL}||[]);{PART_GLOBAL}[{i}]={json.dumps(part)};\n',
             encoding='utf-8'
         )
-    manifest = json.loads(Path('cool-v1-manifest.json').read_text())
-    manifest.update({'parts': len(parts), 'bytes': len(blob), 'lastFineTuneExamples': training_examples})
-    Path('cool-v1-manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
-    print('exported fine-tuned checkpoint:', len(parts), 'parts,', len(blob), 'bytes')
+    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest.update({
+        'parts': len(parts),
+        'bytes': len(blob),
+        'lastFineTuneExamples': training_examples,
+        'fineTuneRevision': config['fineTuneRevision'],
+        'releaseChannel': 'alpha',
+        'lazyLoaded': True
+    })
+    MANIFEST_PATH.write_text(json.dumps(manifest, separators=(',', ':')) + '\n', encoding='utf-8')
+    print('exported fine-tuned Smarter alpha checkpoint:', len(parts), 'parts,', len(blob), 'bytes')
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fine-tune the deployed RogerVIB Smarter checkpoint without retraining from scratch.')
+    parser = argparse.ArgumentParser(description='Fine-tune RogerVIB Smarter Alpha without retraining from scratch.')
     parser.add_argument('--data', default='finetune_data.jsonl')
     parser.add_argument('--epochs', type=int, default=1)
-    parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--lr', type=float, default=3e-5)
     parser.add_argument('--batch-size', type=int, default=24)
     args = parser.parse_args()
+
+    if args.epochs < 1 or args.epochs > 4:
+        raise SystemExit('epochs must be between 1 and 4')
+    if not (0 < args.lr <= 1e-4):
+        raise SystemExit('learning rate must be > 0 and <= 1e-4')
 
     config = load_config()
     rows = load_rows(args.data)
@@ -159,22 +184,20 @@ def main():
     loader = DataLoader(base.Rows(encoded), batch_size=args.batch_size, shuffle=True, collate_fn=collate, num_workers=0)
     model = restore_model(config)
 
-    # Freeze the lower half. Small corrective updates train much faster and are less likely
-    # to erase basic behavior learned by the full model.
-    trainable_names = []
+    # Freeze the lower half. Small corrective updates are fast and reduce catastrophic forgetting.
     cutoff = max(1, int(config['layers']) // 2)
+    trainable_params = []
     for name, param in model.named_parameters():
         layer_match = re.match(r'blocks\.(\d+)\.', name)
         trainable = not layer_match or int(layer_match.group(1)) >= cutoff
         param.requires_grad = trainable
         if trainable:
-            trainable_names.append(name)
+            trainable_params.append(param)
 
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
-    print('fine-tuning from deployed checkpoint')
+    print('fine-tuning from Smarter Alpha checkpoint')
     print('rows:', len(rows), 'epochs:', args.epochs, 'lr:', args.lr)
     print('trainable params:', sum(p.numel() for p in trainable_params), '/', sum(p.numel() for p in model.parameters()))
-    opt = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=0.005)
+    opt = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=0.003)
 
     for epoch in range(args.epochs):
         model.train()
