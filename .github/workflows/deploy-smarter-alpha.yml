@@ -1,0 +1,208 @@
+name: Deploy Smarter v0.6 Alpha
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-smarter-alpha.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: deploy-smarter-v06-alpha
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download preserved trained weights
+        uses: actions/download-artifact@v4
+        with:
+          name: rogervib-v06-trained-weights
+          path: .smarter-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: rogerdiffrient-coder/RogerVIB
+          run-id: 31975355137
+
+      - name: Build separate lazy-loaded Smarter alpha runtime
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          SRC = Path('.smarter-artifact')
+          VERSION = '0.6.0-alpha.1'
+          manifest = json.loads((SRC / 'cool-v1-manifest.json').read_text())
+          parts = int(manifest['parts'])
+
+          # Keep v0.5 Cool untouched. Smarter gets its own globals/files so Alpha Test
+          # does not replace the stable model.
+          config = (SRC / 'cool-v1-config.js').read_text()
+          config = config.replace('window.COOL_V1_CONFIG=', 'window.SMARTER_V06_CONFIG=')
+          Path('smarter-v06-config.js').write_text(config)
+
+          for i in range(parts):
+              text = (SRC / f'cool-v1-part{i}.js').read_text()
+              text = text.replace('window.COOL_V1_PARTS', 'window.SMARTER_V06_PARTS')
+              Path(f'smarter-v06-part{i}.js').write_text(text)
+
+          alpha_manifest = dict(manifest)
+          alpha_manifest.update({'releaseChannel': 'alpha', 'lazyLoaded': True})
+          Path('smarter-v06-manifest.json').write_text(json.dumps(alpha_manifest, separators=(',', ':')) + '\n')
+
+          # Build the real Smarter runtime from Cool's browser Transformer implementation.
+          runtime = Path('models/cool.js').read_text()
+          runtime = runtime.replace('// RogerVIB v0.5 Cool\n// ~7M-parameter, 8-layer subword decoder-only Transformer with RoPE + tool use.',
+              '// RogerVIB v0.6 Smarter Alpha\n// 11.17M-parameter browser Transformer with RoPE + grounded tool use.')
+
+          old = """    const answer = decode(generateIds(prompt, answerReserve));
+              if (tool.name === 'web_search' && (!answer || answer.length < 8 || !/[a-z]/i.test(answer))) return formatToolResult(result);
+              return answer;
+          """
+          new = """    const answer = decode(generateIds(prompt, answerReserve));
+              if (tool.name === 'web_search') {
+                const formatted = formatToolResult(result);
+                const stop = new Set(['about', 'after', 'again', 'being', 'could', 'current', 'found', 'latest', 'newest', 'result', 'results', 'search', 'source', 'sources', 'there', 'these', 'this', 'those', 'update', 'using', 'with']);
+                const evidence = new Set((formatted.toLowerCase().match(/[a-z0-9]{5,}/g) || []).filter(word => !stop.has(word)));
+                const answerWords = new Set((answer.toLowerCase().match(/[a-z0-9]{5,}/g) || []).filter(word => !stop.has(word)));
+                let overlap = 0;
+                for (const word of answerWords) if (evidence.has(word)) overlap++;
+                if (!answer || answer.length < 8 || !/[a-z]/i.test(answer) || overlap < 1) return formatted;
+              }
+              return answer;
+          """
+          if old not in runtime:
+              raise SystemExit('Could not find Cool search-grounding anchor')
+          runtime = runtime.replace(old, new, 1)
+
+          old_reg = "id: 'cool', name: 'Cool', order: 50,"
+          new_reg = "id: 'smarter', name: 'Smarter', order: 60, alpha: true, params: M.params, context: M.context, status: 'alpha', knownIssues: 'experimental; may be slower or say weird things',"
+          if old_reg not in runtime:
+              raise SystemExit('Could not find Cool registration anchor')
+          runtime = runtime.replace(old_reg, new_reg, 1)
+
+          old_desc = "description: `RogerVIB v0.5 Cool — ${M.params.toLocaleString()}-parameter, ${M.layers}-layer Transformer with tools, RoPE, and ${M.context}-token context.`,"
+          new_desc = "description: `RogerVIB v${M.version || '0.6.0'} Smarter Alpha — ${M.params.toLocaleString()}-parameter, ${M.layers}-layer Transformer with grounded tools, RoPE, and ${M.context}-token context.`,"
+          if old_desc not in runtime:
+              raise SystemExit('Could not find Cool description anchor')
+          runtime = runtime.replace(old_desc, new_desc, 1)
+          runtime = runtime.replace('COOL_V1', 'SMARTER_V06').replace('Cool weights/config are missing', 'Smarter weights/config are missing')
+          Path('models/smarter-runtime.js').write_text(runtime)
+
+          # Register a tiny proxy on normal page load. The 11 MB weights are fetched only
+          # if somebody actually sends a message using Smarter in Alpha Test.
+          part_urls = ',\n      '.join(repr(f'smarter-v06-part{i}.js?v={VERSION}') for i in range(parts))
+          proxy = f"""// RogerVIB v0.6 Smarter Alpha lazy loader.
+          (() => {{
+            let loadPromise = null;
+            const version = '{VERSION}';
+            const partUrls = [
+              {part_urls}
+            ];
+
+            function loadScript(src) {{
+              return new Promise((resolve, reject) => {{
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`Failed to load ${{src}}`));
+                document.head.appendChild(script);
+              }});
+            }}
+
+            async function loadRealModel() {{
+              if (!loadPromise) loadPromise = (async () => {{
+                await loadScript(`smarter-v06-config.js?v=${{version}}`);
+                const batchSize = 8;
+                for (let i = 0; i < partUrls.length; i += batchSize) {{
+                  await Promise.all(partUrls.slice(i, i + batchSize).map(loadScript));
+                }}
+                await loadScript(`models/smarter-runtime.js?v=${{version}}`);
+                const model = RogerVIB.getModel('smarter');
+                if (!model || model === proxy) throw new Error('Smarter runtime did not register');
+                return model;
+              }})();
+              return loadPromise;
+            }}
+
+            const proxy = {{
+              id: 'smarter',
+              name: 'Smarter',
+              order: 60,
+              alpha: true,
+              params: 11170944,
+              context: 512,
+              status: 'alpha',
+              knownIssues: 'experimental; first reply loads about 11 MB of model weights',
+              description: 'RogerVIB v0.6 Smarter Alpha — 11,170,944 parameters, 10 layers, 512-token context, and grounded tools.',
+              async reply(input, context) {{
+                try {{
+                  const model = await loadRealModel();
+                  return await model.reply(input, context);
+                }} catch (error) {{
+                  console.error('Smarter alpha failed to load:', error);
+                  return 'smarter alpha failed to load. incredible.';
+                }}
+              }}
+            }};
+            RogerVIB.registerModel(proxy);
+          }})();
+          """
+          Path('models/smarter.js').write_text(proxy)
+
+          index_path = Path('index.html')
+          index = index_path.read_text()
+          # Remove an older Smarter Alpha proxy include if this workflow is re-run.
+          index = re.sub(r'\n\s*<script src="models/smarter\.js[^>]*></script>\s*', '\n', index)
+          anchor = re.search(r'\s*<script src="models/cool\.js\?v=[^"]+"></script>', index)
+          if not anchor:
+              raise SystemExit('Could not find Cool model script in index.html')
+          line = anchor.group(0).strip()
+          index = index.replace(anchor.group(0), '\n  ' + line + f'\n  <script src="models/smarter.js?v={VERSION}"></script>', 1)
+          index_path.write_text(index)
+          print(f'Built Smarter Alpha separately from Cool with {parts} lazy-loaded weight chunks.')
+          PY
+
+      - name: Validate Smarter alpha files
+        run: |
+          node --check models/smarter.js
+          node --check models/smarter-runtime.js
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m = json.loads(Path('smarter-v06-manifest.json').read_text())
+          assert m['parts'] == 76
+          assert m['params'] == 11170944
+          assert m['releaseChannel'] == 'alpha'
+          assert sum(1 for _ in Path('.').glob('smarter-v06-part*.js')) == 76
+          print('SMARTER_ALPHA_FILES_OK')
+          PY
+
+      - name: Commit preserved Smarter build without retraining
+        run: |
+          rm -rf .smarter-artifact
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html models/smarter.js models/smarter-runtime.js smarter-v06-config.js smarter-v06-manifest.json smarter-v06-part*.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Deploy RogerVIB v0.6 Smarter as Alpha [skip ci]'
+          test -z "$(git status --porcelain)"
+          git pull --rebase origin main
+          git push origin HEAD:main
