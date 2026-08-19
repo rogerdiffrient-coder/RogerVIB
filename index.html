@@ -7,8 +7,9 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB</title>
-  <link rel="stylesheet" href="styles.css?v=0.9.1" />
-  <link rel="stylesheet" href="widgets.css?v=0.9.1" />
+  <link rel="stylesheet" href="styles.css?v=1.0.0" />
+  <link rel="stylesheet" href="widgets.css?v=1.0.0" />
+  <link rel="stylesheet" href="thinking.css?v=1.0.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -55,19 +56,17 @@
             </div>
           </div>
         </form>
-        <div class="disclaimer">RogerVIB uses your local Ollama models. Tools and safe widgets are supplied by RogerVIB.</div>
+        <div class="disclaimer">RogerVIB uses Ollama models. Tools, widgets, and optional model-provided thinking are supplied through RogerVIB.</div>
       </div>
     </main>
   </div>
 
-  <!-- RogerVIB no longer loads any built-in/custom AI model. -->
-  <!-- These scripts only define tool implementations and safe UI widgets that Ollama models can call. -->
-  <script src="tools/tools.js?v=0.9.1"></script>
-  <script src="tools/calculator.js?v=0.9.1"></script>
-  <script src="tools/web-search.js?v=0.9.1"></script>
-  <script src="tools/widget-observer-guard.js?v=0.9.1"></script>
-  <script src="tools/widgets.js?v=0.9.1"></script>
-  <script src="tools/pinned-ollama-models.js?v=0.9.2"></script>
-  <script src="main.js?v=0.9.1"></script>
+  <!-- RogerVIB loads no built-in/custom AI model. -->
+  <script src="tools/tools.js?v=1.0.0"></script>
+  <script src="tools/calculator.js?v=1.0.0"></script>
+  <script src="tools/web-search.js?v=1.0.0"></script>
+  <script src="tools/widget-observer-guard.js?v=1.0.0"></script>
+  <script src="tools/widgets.js?v=1.0.0"></script>
+  <script src="main.js?v=1.0.0"></script>
 </body>
 </html>
