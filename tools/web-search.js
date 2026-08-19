@@ -58,7 +58,17 @@
 
   RogerVIBTools.register({
     name: 'web_search',
-    description: 'Search current information. Uses a configured web backend when available and Wikipedia as a keyless fallback.',
+    description: 'Search for current or externally verifiable information. Use this whenever the answer could have changed recently, the user asks to search/look something up, or you are unsure of a factual claim. Do not invent search results.',
+    parameters: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: {
+          type: 'string',
+          description: 'A concise search query containing the important names, terms, and context needed to answer the user.'
+        }
+      }
+    },
     async run(args) {
       const query = String(args?.query || '').trim().slice(0, 300);
       if (!query) throw new Error('missing search query');
