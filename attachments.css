@@ -1,0 +1,11 @@
+.attachment-preview-strip { display:none; gap:8px; padding:0 6px 10px; flex-wrap:wrap; }
+.attachment-preview-strip.has-attachments { display:flex; }
+.attachment-preview { position:relative; width:74px; height:74px; border-radius:12px; overflow:hidden; border:1px solid #49494f; background:#202126; }
+.attachment-preview img { width:100%; height:100%; object-fit:cover; display:block; }
+.attachment-remove { position:absolute; top:4px; right:4px; width:24px; height:24px; border:0; border-radius:50%; background:rgba(10,10,12,.82); color:#fff; font-size:17px; line-height:1; cursor:pointer; }
+.attachment-remove:hover { background:#111; }
+.sent-attachment-strip { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; margin:0 0 7px; }
+.sent-attachment-strip img { max-width:260px; max-height:220px; object-fit:cover; border-radius:14px; border:1px solid #44464d; background:#202126; }
+@media (max-width:760px) {
+  .sent-attachment-strip img { max-width:min(68vw,240px); max-height:200px; }
+}
