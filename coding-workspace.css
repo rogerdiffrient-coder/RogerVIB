@@ -1,0 +1,26 @@
+.coding-workspace { width:min(46vw,760px); min-width:420px; height:100vh; background:#1d1f25; border-left:1px solid #383b45; display:flex; flex-direction:column; position:relative; z-index:20; box-shadow:-14px 0 36px rgba(0,0,0,.22); }
+.coding-workspace.hidden { display:none; }
+.coding-workspace-header { height:58px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 12px 0 16px; border-bottom:1px solid #343740; background:#202229; }
+.coding-workspace-heading { display:flex; align-items:baseline; gap:10px; min-width:0; }
+.coding-workspace-title { font-size:15px; white-space:nowrap; }
+.coding-workspace-filename { color:#a9abb4; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.coding-workspace-header-actions { display:flex; gap:4px; }
+.coding-workspace-icon-button { width:34px; height:34px; border:0; border-radius:9px; background:transparent; color:#d8d9df; cursor:pointer; font-size:20px; }
+.coding-workspace-icon-button:hover { background:#30333c; }
+.coding-workspace-body { flex:1; min-height:0; display:grid; grid-template-rows:minmax(220px,1fr) minmax(220px,1fr); }
+.coding-editor-section,.coding-preview-section { min-height:0; display:flex; flex-direction:column; }
+.coding-editor-section { border-bottom:1px solid #3a3d46; }
+.coding-pane-label { height:34px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; padding:0 12px; font-size:10px; font-weight:800; letter-spacing:.12em; color:#aeb0b9; background:#272a32; border-bottom:1px solid #363943; }
+.coding-workspace-editor { flex:1; width:100%; min-height:0; resize:none; border:0; border-radius:0; outline:none; padding:14px 16px; background:#16181d; color:#eceef4; font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; tab-size:2; }
+.coding-workspace-editor::selection { background:#44506d; }
+.coding-preview-section { background:#fff; }
+.coding-preview-label { color:#aeb0b9; background:#272a32; }
+.coding-live-dot { color:#66d08b; font-size:12px; letter-spacing:0; }
+.coding-workspace-preview { flex:1; width:100%; min-height:0; border:0; background:#fff; }
+body.coding-workspace-open .main-panel { min-width:360px; }
+@media (max-width:950px) {
+  .coding-workspace { position:absolute; right:0; top:0; width:min(88vw,700px); min-width:0; }
+}
+@media (max-width:620px) {
+  .coding-workspace { width:100vw; }
+}
