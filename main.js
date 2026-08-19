@@ -1,10 +1,25 @@
 // RogerVIB shared app/UI layer.
-// AI responses are provided by a local Ollama server.
+// Every AI model shown in RogerVIB comes directly from the user's local Ollama server.
+// RogerVIB itself supplies tools and a tool-use system prompt, but no custom AI models.
 
 (() => {
   const STORAGE_KEY = 'rogervib_chats_v1';
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
   const OLLAMA_BASE_URL = 'http://localhost:11434';
+  const MAX_TOOL_ROUNDS = 8;
+
+  const SYSTEM_PROMPT = `You are RogerVIB, running through a local Ollama model.
+
+You have native tools supplied by RogerVIB. Use them correctly instead of pretending to use them.
+
+TOOL RULES:
+- calculator: Use it for arithmetic, numeric expressions, or whenever exact calculation matters. Do not guess arithmetic when the calculator can answer it.
+- web_search: Use it when the user explicitly asks you to search, look up, verify, or find current information; when facts may have changed recently; or when you are unsure of a factual claim. Never claim you searched unless you actually called web_search.
+- Read tool results before answering. If a tool fails, say what failed rather than inventing a result.
+- You may call more than one tool, and you may call tools again after seeing results if needed.
+- Do not expose raw tool-call JSON unless the user specifically asks for technical debugging details.
+
+Answer naturally and directly after using any needed tools.`;
 
   window.addEventListener('DOMContentLoaded', () => {
     const chatForm = document.getElementById('chatForm');
@@ -84,7 +99,7 @@
       setConnectionMessage(`Connecting to Ollama at ${OLLAMA_BASE_URL}…`);
 
       try {
-        const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
+        const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { cache: 'no-store' });
         if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
 
         const data = await response.json();
@@ -95,10 +110,7 @@
         modelPicker.innerHTML = '';
 
         if (!availableModels.length) {
-          const option = document.createElement('option');
-          option.textContent = 'No Ollama models installed';
-          option.value = '';
-          modelPicker.appendChild(option);
+          modelPicker.innerHTML = '<option value="">No Ollama models installed</option>';
           setConnectionMessage('Ollama is running, but there are no installed models yet.');
           return;
         }
@@ -114,7 +126,7 @@
         if (!chat.model || !availableModels.includes(chat.model)) chat.model = availableModels[0];
         modelPicker.value = chat.model;
         modelPicker.disabled = false;
-        setConnectionMessage(`Connected to Ollama • ${availableModels.length} model${availableModels.length === 1 ? '' : 's'} available`);
+        setConnectionMessage(`Connected to Ollama • ${availableModels.length} installed model${availableModels.length === 1 ? '' : 's'} • tools enabled`);
         saveChats();
       } catch (error) {
         console.error('Could not connect to Ollama:', error);
@@ -277,22 +289,21 @@
       }
     }
 
-    function ollamaMessages(chat) {
-      return chat.messages.map(message => ({
-        role: message.role === 'bot' ? 'assistant' : 'user',
-        content: String(message.text)
-      }));
+    function conversationForOllama(chat) {
+      return [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...chat.messages.map(message => ({
+          role: message.role === 'bot' ? 'assistant' : 'user',
+          content: String(message.text)
+        }))
+      ];
     }
 
-    async function askOllama(chat, model) {
+    async function ollamaChat(model, messages, tools) {
       const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages: ollamaMessages(chat),
-          stream: false
-        })
+        body: JSON.stringify({ model, messages, tools, stream: false })
       });
 
       if (!response.ok) {
@@ -304,10 +315,44 @@
         throw new Error(`Ollama returned HTTP ${response.status}${detail}`);
       }
 
-      const data = await response.json();
-      const text = data?.message?.content;
-      if (typeof text !== 'string' || !text.trim()) throw new Error('Ollama returned an empty response');
-      return text;
+      return response.json();
+    }
+
+    async function askOllama(chat, model) {
+      const tools = window.RogerVIBTools?.schemas?.() || [];
+      const messages = conversationForOllama(chat);
+
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const data = await ollamaChat(model, messages, tools);
+        const assistantMessage = data?.message;
+        if (!assistantMessage) throw new Error('Ollama returned no message');
+
+        const toolCalls = Array.isArray(assistantMessage.tool_calls) ? assistantMessage.tool_calls : [];
+        if (!toolCalls.length) {
+          const text = String(assistantMessage.content || '').trim();
+          if (!text) throw new Error('Ollama returned an empty response');
+          return text;
+        }
+
+        messages.push({
+          role: 'assistant',
+          content: String(assistantMessage.content || ''),
+          tool_calls: toolCalls
+        });
+
+        for (const call of toolCalls) {
+          const name = call?.function?.name;
+          const args = call?.function?.arguments || {};
+          const result = await window.RogerVIBTools.run(name, args);
+          messages.push({
+            role: 'tool',
+            tool_name: String(name || 'unknown_tool'),
+            content: JSON.stringify(result)
+          });
+        }
+      }
+
+      throw new Error(`tool loop exceeded ${MAX_TOOL_ROUNDS} rounds`);
     }
 
     async function sendMessage() {
@@ -335,7 +380,7 @@
       isSending = true;
       sendButton.disabled = true;
       modelPicker.disabled = true;
-      setConnectionMessage(`Thinking with ${model}…`);
+      setConnectionMessage(`Thinking with ${model} • tools available…`);
 
       try {
         const target = chats.find(item => item.id === targetChatId);
@@ -349,7 +394,7 @@
         if (target) {
           target.messages.push({
             role: 'bot',
-            text: `Ollama error: ${error.message}. Make sure Ollama is running and this page is allowed to connect to localhost:11434.`
+            text: `Ollama error: ${error.message}. Make sure Ollama is running, the selected model supports the request, and this page is allowed to connect to localhost:11434.`
           });
           saveChats();
         }
@@ -358,7 +403,7 @@
         sendButton.disabled = false;
         modelPicker.disabled = !availableModels.length;
         setConnectionMessage(availableModels.length
-          ? `Connected to Ollama • using ${currentModel()}`
+          ? `Connected to Ollama • using ${currentModel()} • ${window.RogerVIBTools?.registry?.size || 0} tools`
           : 'Ollama is unavailable.');
         if (activeChatId === targetChatId) renderConversation();
         renderChatList();
@@ -388,7 +433,7 @@
       if (!chat || !modelPicker.value) return;
       chat.model = modelPicker.value;
       saveChats();
-      setConnectionMessage(`Connected to Ollama • using ${chat.model}`);
+      setConnectionMessage(`Connected to Ollama • using ${chat.model} • ${window.RogerVIBTools?.registry?.size || 0} tools`);
       messageInput.focus();
     });
     collapseButton.addEventListener('click', () => {
