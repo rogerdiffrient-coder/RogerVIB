@@ -1,0 +1,80 @@
+.rogervib-widget-row {
+  max-width: 780px;
+  margin: -14px auto 30px;
+  padding-left: 44px;
+}
+
+.rv-widget {
+  width: min(100%, 720px);
+  border: 1px solid #3a3d45;
+  background: #26282f;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 14px 40px rgba(0,0,0,.2);
+}
+
+.rv-widget-top {
+  min-height: 45px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.rv-widget-kicker { color: #969aa5; font-size: 10px; letter-spacing: .12em; font-weight: 850; }
+.rv-widget-title { font-size: 14px; color: #eceef4; }
+
+/* Calculator */
+.rv-widget-calculator { background: #292b33; }
+.rv-calc-body { min-height: 175px; padding: 28px 28px 26px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; }
+.rv-calc-expression { color: #aeb2bd; font-size: 22px; }
+.rv-calc-result { color: #f0f1f6; font-size: clamp(52px, 8vw, 78px); line-height: 1.05; letter-spacing: -.04em; font-weight: 400; margin-top: 14px; }
+.rv-calc-steps { margin-top: 20px; width: 100%; color: #b9bdc7; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; line-height: 1.5; }
+
+/* Markdown / document */
+.rv-markdown-content { padding: 20px 22px 24px; color: #e7e8ed; line-height: 1.65; }
+.rv-markdown-content h1, .rv-markdown-content h2, .rv-markdown-content h3 { margin: 18px 0 8px; line-height: 1.2; }
+.rv-markdown-content h1:first-child, .rv-markdown-content h2:first-child, .rv-markdown-content h3:first-child { margin-top: 0; }
+.rv-markdown-content code { background: #181a20; border: 1px solid #393c45; padding: 2px 5px; border-radius: 6px; }
+.rv-md-li { margin: 4px 0; }
+
+/* Shared game UI */
+.rv-widget-game-text_adventure { border-color: #45506a; background: linear-gradient(180deg,#262a35,#22242b); }
+.rv-widget-game-trivia { border-color: #554a7d; background: linear-gradient(180deg,#2b2739,#24242b); }
+.rv-widget-game-twenty_questions { border-color: #4d6659; background: linear-gradient(180deg,#26312c,#222824); }
+.rv-widget-game-wordle { border-color: #46564c; }
+.rv-widget-game-hangman { border-color: #655346; }
+.rv-widget-game-chess { border-color: #5c5c5c; }
+.rv-widget-game-guess_number { border-color: #42637a; }
+.rv-widget-game-rock_paper_scissors { border-color: #6b4b6b; }
+
+.rv-game-status { margin: 16px 18px 0; color: #c9ccd4; font-size: 13px; }
+.rv-game-score { margin: 8px 18px 0; color: #aeb3c0; font-size: 12px; font-weight: 700; }
+.rv-game-main { padding: 18px; font-size: 16px; line-height: 1.65; white-space: pre-wrap; }
+.rv-game-meta { margin: 0 18px 10px; color: #aeb2bd; font-size: 13px; }
+.rv-game-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 18px 16px; }
+.rv-game-chip { padding: 5px 9px; border-radius: 999px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); font-size: 12px; color: #d9dbe1; }
+.rv-widget-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 18px; }
+.rv-widget-action { border: 1px solid #474b55; background: #32353d; color: #f0f0f2; border-radius: 11px; padding: 9px 12px; cursor: pointer; font-weight: 650; }
+.rv-widget-action:hover { background: #3d414b; border-color: #5c616d; }
+
+/* Wordle */
+.rv-wordle-grid { display: grid; grid-template-columns: repeat(5, 52px); justify-content: center; gap: 6px; padding: 20px; }
+.rv-wordle-tile { width: 52px; height: 52px; display: grid; place-items: center; border: 2px solid #4b4e57; background: #202229; border-radius: 5px; font-size: 23px; font-weight: 850; }
+.rv-wordle-tile.correct { background: #538d4e; border-color: #538d4e; }
+.rv-wordle-tile.present { background: #b59f3b; border-color: #b59f3b; }
+.rv-wordle-tile.absent { background: #3a3a3c; border-color: #3a3a3c; }
+
+/* Chess */
+.rv-chess-board { width: min(88vw, 420px); aspect-ratio: 1; display: grid; grid-template-columns: repeat(8,1fr); margin: 20px auto 24px; overflow: hidden; border-radius: 10px; border: 1px solid #555; }
+.rv-chess-cell { display: grid; place-items: center; font-size: clamp(25px,5vw,43px); line-height: 1; user-select: none; }
+.rv-chess-cell.light { background: #d8d2c4; color: #171717; }
+.rv-chess-cell.dark { background: #747d69; color: #171717; }
+
+@media (max-width:760px) {
+  .rogervib-widget-row { padding-left: 0; margin-top: -10px; }
+  .rv-widget { border-radius: 17px; }
+  .rv-calc-body { min-height: 145px; padding: 22px; }
+  .rv-calc-expression { font-size: 18px; }
+  .rv-wordle-grid { transform: scale(.86); transform-origin: center top; margin-bottom: -38px; }
+}
