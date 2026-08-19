@@ -1,11 +1,15 @@
 // RogerVIB shared tool system.
-// Models can call RogerVIB.tools.run(name, args) without owning tool implementations.
+// Ollama models receive these tools as native function-calling schemas.
 (() => {
   const registry = new Map();
 
   function register(tool) {
     if (!tool?.name || typeof tool.run !== 'function') throw new Error('Invalid RogerVIB tool');
-    registry.set(tool.name, tool);
+    registry.set(tool.name, {
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      ...tool
+    });
   }
 
   async function run(name, args = {}) {
@@ -19,9 +23,24 @@
     }
   }
 
-  function describe() {
-    return [...registry.values()].map(tool => ({ name: tool.name, description: tool.description || '' }));
+  function schemas() {
+    return [...registry.values()].map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description || '',
+        parameters: tool.parameters || { type: 'object', properties: {} }
+      }
+    }));
   }
 
-  window.RogerVIBTools = { registry, register, run, describe };
+  function describe() {
+    return [...registry.values()].map(tool => ({
+      name: tool.name,
+      description: tool.description || '',
+      parameters: tool.parameters || { type: 'object', properties: {} }
+    }));
+  }
+
+  window.RogerVIBTools = { registry, register, run, schemas, describe };
 })();
