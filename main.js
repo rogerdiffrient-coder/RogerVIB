@@ -1,7 +1,5 @@
 // RogerVIB shared app/UI layer.
-// Every AI model shown in RogerVIB comes from Ollama, with selected Ollama cloud models pinned into the picker.
-// RogerVIB supplies tools, widgets, and UI only — no custom AI models.
-
+// All AI models come from Ollama. RogerVIB supplies tools, widgets, streaming UI, and game routing.
 (() => {
   const STORAGE_KEY = 'rogervib_chats_v1';
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
@@ -14,12 +12,13 @@
 You have native tools and safe widgets supplied by RogerVIB. Use them correctly instead of pretending to use them.
 
 TOOL RULES:
-- calculator: Use it for arithmetic, numeric expressions, or whenever exact calculation matters. Do not guess arithmetic when the calculator can answer it.
-- web_search: Use it when the user explicitly asks you to search, look up, verify, or find current information; when facts may have changed recently; or when you are unsure of a factual claim. Never claim you searched unless you actually called web_search.
-- show_calculator_widget: Use after calculator when a visual calculator card would improve the answer.
+- calculator: Use it for arithmetic or whenever exact calculation matters.
+- web_search: Use it for explicit searches, current information, verification, or facts you are unsure about. Never claim you searched unless you actually called web_search.
+- show_calculator_widget: Use after calculator when a visual calculator card improves the answer.
 - show_markdown_widget: Use for longer structured notes, guides, or document-like content.
 - show_game_widget: Use to present supported games as interactive inline UI.
-- game_engine: Use for deterministic game rules/state when supported instead of inventing outcomes.
+- game_engine: Use for deterministic game rules/state instead of inventing outcomes.
+- For Wordle, call game_engine with action=start exactly once when starting a new game. RogerVIB automatically routes valid guesses typed in chat into the active Wordle engine, so DO NOT restart Wordle after every guess and do not ask the user to click a guess button.
 - Read tool results before answering. If a tool fails, say what failed rather than inventing a result.
 - You may call more than one tool and may call tools again after seeing results.
 - Do not expose raw tool-call JSON unless the user specifically asks for technical debugging details.
@@ -50,18 +49,34 @@ Answer naturally and directly after using any needed tools.`;
       return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
 
-    function createChatObject(model = '') {
-      return { id: makeId(), title: 'New conversation', model, messages: [] };
+    function normalizeSegments(message, role) {
+      if (role !== 'bot') return [];
+      if (Array.isArray(message.segments)) {
+        return message.segments
+          .filter(part => part && (part.type === 'thinking' || part.type === 'text'))
+          .map(part => ({ type: part.type, text: String(part.text || ''), round: Number(part.round) || 0 }))
+          .filter(part => part.text);
+      }
+      const parts = [];
+      if (typeof message.thinking === 'string' && message.thinking) parts.push({ type:'thinking', text:message.thinking, round:0 });
+      if (typeof message.text === 'string' && message.text) parts.push({ type:'text', text:message.text, round:0 });
+      return parts;
     }
 
     function normalizeStoredMessage(message) {
       if (!message || typeof message !== 'object') return null;
       const role = message.role === 'bot' ? 'bot' : 'user';
+      const text = String(message.text ?? '');
       return {
         role,
-        text: String(message.text ?? ''),
-        thinking: role === 'bot' && typeof message.thinking === 'string' ? message.thinking : ''
+        text,
+        segments: normalizeSegments(message, role),
+        streaming: false
       };
+    }
+
+    function createChatObject(model = '') {
+      return { id: makeId(), title: 'New conversation', model, messages: [] };
     }
 
     function loadChats() {
@@ -81,7 +96,6 @@ Answer naturally and directly after using any needed tools.`;
 
     let chats = loadChats();
     let activeChatId = localStorage.getItem(ACTIVE_CHAT_KEY);
-
     if (!chats.length) {
       const first = createChatObject();
       chats.push(first);
@@ -90,13 +104,19 @@ Answer naturally and directly after using any needed tools.`;
     if (!chats.some(chat => chat.id === activeChatId)) activeChatId = chats[0].id;
 
     function saveChats() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+      const serializable = chats.map(chat => ({
+        ...chat,
+        messages: chat.messages.map(message => ({
+          role: message.role,
+          text: message.text,
+          segments: message.role === 'bot' ? message.segments : undefined
+        }))
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
       localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
     }
 
-    function activeChat() {
-      return chats.find(chat => chat.id === activeChatId);
-    }
+    function activeChat() { return chats.find(chat => chat.id === activeChatId); }
 
     function currentModel() {
       const chat = activeChat();
@@ -104,9 +124,7 @@ Answer naturally and directly after using any needed tools.`;
       return modelPicker.value || availableModels[0] || '';
     }
 
-    function setConnectionMessage(text) {
-      modelDescription.textContent = text;
-    }
+    function setConnectionMessage(text) { modelDescription.textContent = text; }
 
     function mergeModelLists(detected) {
       const seen = new Set();
@@ -122,44 +140,38 @@ Answer naturally and directly after using any needed tools.`;
       modelPicker.disabled = true;
       modelPicker.innerHTML = '<option>Connecting to Ollama…</option>';
       setConnectionMessage(`Connecting to Ollama at ${OLLAMA_BASE_URL}…`);
-
       let detected = [];
       let connected = false;
       try {
-        const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { cache: 'no-store' });
+        const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { cache:'no-store' });
         if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
         const data = await response.json();
-        detected = Array.isArray(data.models)
-          ? data.models.map(item => item.name || item.model).filter(Boolean)
-          : [];
+        detected = Array.isArray(data.models) ? data.models.map(item => item.name || item.model).filter(Boolean) : [];
         connected = true;
       } catch (error) {
-        console.warn('Could not load local Ollama tags; keeping pinned cloud models available:', error);
+        console.warn('Could not load local Ollama tags; keeping pinned models available:', error);
       }
 
       availableModels = mergeModelLists(detected);
       modelPicker.innerHTML = '';
-
       if (!availableModels.length) {
         modelPicker.innerHTML = '<option value="">No Ollama models available</option>';
         setConnectionMessage('No Ollama models are available.');
         return;
       }
-
       for (const modelName of availableModels) {
         const option = document.createElement('option');
         option.value = modelName;
         option.textContent = modelName;
         modelPicker.appendChild(option);
       }
-
       const chat = activeChat();
       if (!chat.model || !availableModels.includes(chat.model)) chat.model = availableModels[0];
       modelPicker.value = chat.model;
       modelPicker.disabled = false;
       setConnectionMessage(connected
-        ? `Connected to Ollama • ${availableModels.length} model${availableModels.length === 1 ? '' : 's'} available • tools + thinking enabled`
-        : `Ollama tags unavailable • pinned cloud model available • tools + thinking enabled`);
+        ? `Connected to Ollama • ${availableModels.length} model${availableModels.length === 1 ? '' : 's'} • live streaming + tools enabled`
+        : 'Ollama tags unavailable • pinned model available');
       saveChats();
     }
 
@@ -168,25 +180,26 @@ Answer naturally and directly after using any needed tools.`;
       messageInput.style.height = `${Math.min(messageInput.scrollHeight, 160)}px`;
     }
 
-    function renderThinkingBlock(thinking) {
-      const text = String(thinking || '').trim();
-      if (!text) return null;
+    function createThinkingBlock(text = '', live = false) {
       const details = document.createElement('details');
       details.className = 'thinking-block';
+      if (live) {
+        details.open = true;
+        details.classList.add('thinking-live');
+      }
       const summary = document.createElement('summary');
-      summary.textContent = 'Thinking';
+      summary.textContent = live ? 'Thinking…' : 'Thinking';
       const body = document.createElement('div');
       body.className = 'thinking-content';
       body.textContent = text;
       details.append(summary, body);
-      return details;
+      return { details, summary, body };
     }
 
     function renderMessage(message) {
-      const role = message.role;
       const row = document.createElement('div');
-      row.className = `message-row ${role}`;
-      if (role === 'bot') {
+      row.className = `message-row ${message.role}`;
+      if (message.role === 'bot') {
         const avatar = document.createElement('div');
         avatar.className = 'bot-avatar';
         avatar.textContent = 'R';
@@ -194,28 +207,37 @@ Answer naturally and directly after using any needed tools.`;
       }
       const stack = document.createElement('div');
       stack.className = 'message-stack';
-      const bubble = document.createElement('div');
-      bubble.className = 'message-bubble';
-      bubble.textContent = message.text;
-      stack.appendChild(bubble);
-      if (role === 'bot') {
-        const thinking = renderThinkingBlock(message.thinking);
-        if (thinking) stack.appendChild(thinking);
+      if (message.role === 'user') {
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        bubble.textContent = message.text;
+        stack.appendChild(bubble);
+      } else {
+        const parts = message.segments?.length ? message.segments : (message.text ? [{type:'text', text:message.text, round:0}] : []);
+        for (const part of parts) {
+          if (part.type === 'thinking') {
+            stack.appendChild(createThinkingBlock(part.text, false).details);
+          } else {
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = part.text;
+            stack.appendChild(bubble);
+          }
+        }
       }
       row.appendChild(stack);
       conversation.appendChild(row);
+      return { row, stack };
     }
 
     function renderConversation() {
       conversation.querySelectorAll('.message-row').forEach(node => node.remove());
       const chat = activeChat();
       if (!chat) return;
-
       if (availableModels.length) {
         if (!availableModels.includes(chat.model)) chat.model = availableModels[0];
         modelPicker.value = chat.model;
       }
-
       emptyState.classList.toggle('hidden', chat.messages.length > 0);
       copyChatButton.disabled = chat.messages.length === 0;
       for (const message of chat.messages) renderMessage(message);
@@ -227,24 +249,18 @@ Answer naturally and directly after using any needed tools.`;
       for (const chat of chats) {
         const entry = document.createElement('div');
         entry.className = `chat-entry${chat.id === activeChatId ? ' active' : ''}`;
-
         const button = document.createElement('button');
         button.className = 'chat-item';
         button.type = 'button';
         button.textContent = chat.title;
         button.title = chat.title;
         button.addEventListener('click', () => selectChat(chat.id));
-
         const remove = document.createElement('button');
         remove.className = 'delete-chat';
         remove.type = 'button';
         remove.textContent = '×';
         remove.setAttribute('aria-label', `Delete ${chat.title}`);
-        remove.addEventListener('click', event => {
-          event.stopPropagation();
-          deleteChat(chat.id);
-        });
-
+        remove.addEventListener('click', event => { event.stopPropagation(); deleteChat(chat.id); });
         entry.append(button, remove);
         chatList.appendChild(entry);
       }
@@ -256,6 +272,7 @@ Answer naturally and directly after using any needed tools.`;
       saveChats();
       renderChatList();
       renderConversation();
+      window.RogerVIBWidgets?.renderActiveWidgets?.();
       messageInput.focus();
       if (window.innerWidth <= 760) sidebar.classList.remove('mobile-open');
     }
@@ -269,9 +286,7 @@ Answer naturally and directly after using any needed tools.`;
         const replacement = createChatObject(availableModels[0] || '');
         chats.push(replacement);
         activeChatId = replacement.id;
-      } else if (wasActive) {
-        activeChatId = chats[Math.min(index, chats.length - 1)].id;
-      }
+      } else if (wasActive) activeChatId = chats[Math.min(index, chats.length - 1)].id;
       saveChats();
       renderChatList();
       renderConversation();
@@ -291,17 +306,11 @@ Answer naturally and directly after using any needed tools.`;
     }
 
     function transcriptFor(chat) {
-      return chat.messages.map(message => {
-        const speaker = message.role === 'user' ? 'User' : 'Bot';
-        return `${speaker}:  ${String(message.text)}`;
-      }).join('\n');
+      return chat.messages.map(message => `${message.role === 'user' ? 'User' : 'Bot'}:  ${String(message.text || '')}`).join('\n');
     }
 
     async function writeClipboard(text) {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        return;
-      }
+      if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
       const fallback = document.createElement('textarea');
       fallback.value = text;
       fallback.setAttribute('readonly', '');
@@ -317,107 +326,140 @@ Answer naturally and directly after using any needed tools.`;
     function showCopyFeedback(label) {
       window.clearTimeout(copyFeedbackTimer);
       copyChatButton.textContent = label;
-      copyFeedbackTimer = window.setTimeout(() => {
-        copyChatButton.textContent = 'Copy Chat';
-      }, 1400);
+      copyFeedbackTimer = window.setTimeout(() => { copyChatButton.textContent = 'Copy Chat'; }, 1400);
     }
 
     async function copyCurrentChat() {
       const chat = activeChat();
-      if (!chat?.messages.length) {
-        showCopyFeedback('Nothing to copy');
-        return;
-      }
-      try {
-        await writeClipboard(transcriptFor(chat));
-        showCopyFeedback('Copied!');
-      } catch (error) {
-        console.error('Copy chat failed:', error);
-        showCopyFeedback('Copy failed');
-      }
+      if (!chat?.messages.length) return showCopyFeedback('Nothing to copy');
+      try { await writeClipboard(transcriptFor(chat)); showCopyFeedback('Copied!'); }
+      catch (error) { console.error(error); showCopyFeedback('Copy failed'); }
     }
 
     function conversationForOllama(chat) {
       return [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...chat.messages.map(message => ({
-          role: message.role === 'bot' ? 'assistant' : 'user',
-          content: String(message.text)
-        }))
+        { role:'system', content:SYSTEM_PROMPT },
+        ...chat.messages
+          .filter(message => !message.streaming)
+          .map(message => ({ role: message.role === 'bot' ? 'assistant' : 'user', content:String(message.text || '') }))
       ];
     }
 
-    async function ollamaChat(model, messages, tools, enableThinking = true) {
-      const requestBody = { model, messages, tools, stream: false };
-      if (enableThinking) requestBody.think = true;
-
-      let response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      // Some models do not accept an explicit `think` value. Retry once without it.
-      if (!response.ok && enableThinking && response.status >= 400 && response.status < 500) {
-        response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages, tools, stream: false })
-        });
+    function appendSegment(message, liveUi, type, delta, round) {
+      if (!delta) return;
+      let part = message.segments.at(-1);
+      let node = liveUi.parts.at(-1);
+      if (!part || part.type !== type || part.round !== round) {
+        part = { type, text:'', round };
+        message.segments.push(part);
+        if (type === 'thinking') {
+          const thinking = createThinkingBlock('', true);
+          liveUi.stack.appendChild(thinking.details);
+          node = { type, root:thinking.details, summary:thinking.summary, body:thinking.body, round };
+        } else {
+          const bubble = document.createElement('div');
+          bubble.className = 'message-bubble live-message';
+          liveUi.stack.appendChild(bubble);
+          node = { type, root:bubble, body:bubble, round };
+        }
+        liveUi.parts.push(node);
       }
-
-      if (!response.ok) {
-        let detail = '';
-        try {
-          const errorBody = await response.json();
-          detail = errorBody?.error ? `: ${errorBody.error}` : '';
-        } catch {}
-        throw new Error(`Ollama returned HTTP ${response.status}${detail}`);
-      }
-
-      return response.json();
+      part.text += delta;
+      node.body.textContent = part.text;
+      requestAnimationFrame(() => { conversation.scrollTop = conversation.scrollHeight; });
     }
 
-    async function askOllama(chat, model) {
+    function finishLiveUi(liveUi) {
+      for (const node of liveUi.parts) {
+        if (node.type === 'thinking') {
+          node.root.classList.remove('thinking-live');
+          node.summary.textContent = 'Thinking';
+          node.root.open = false;
+        } else node.root.classList.remove('live-message');
+      }
+    }
+
+    async function fetchOllamaStream(model, messages, tools, includeThink = true) {
+      const body = { model, messages, tools, stream:true };
+      if (includeThink) body.think = true;
+      return fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      });
+    }
+
+    async function streamRound(model, messages, tools, onDelta) {
+      let response = await fetchOllamaStream(model, messages, tools, true);
+      if (!response.ok && response.status >= 400 && response.status < 500) {
+        response = await fetchOllamaStream(model, messages, tools, false);
+      }
+      if (!response.ok) {
+        let detail = '';
+        try { const body = await response.json(); detail = body?.error ? `: ${body.error}` : ''; } catch {}
+        throw new Error(`Ollama returned HTTP ${response.status}${detail}`);
+      }
+      if (!response.body) throw new Error('Ollama returned no streaming body');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const aggregate = { content:'', thinking:'', tool_calls:[] };
+
+      const consumeLine = line => {
+        if (!line.trim()) return;
+        const data = JSON.parse(line);
+        const message = data?.message || {};
+        if (message.thinking) {
+          aggregate.thinking += String(message.thinking);
+          onDelta('thinking', String(message.thinking));
+        }
+        if (message.content) {
+          aggregate.content += String(message.content);
+          onDelta('text', String(message.content));
+        }
+        if (Array.isArray(message.tool_calls) && message.tool_calls.length) aggregate.tool_calls.push(...message.tool_calls);
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) consumeLine(line);
+        if (done) break;
+      }
+      if (buffer.trim()) consumeLine(buffer);
+      return aggregate;
+    }
+
+    async function askOllama(chat, model, botMessage, liveUi) {
       const tools = window.RogerVIBTools?.schemas?.() || [];
       const messages = conversationForOllama(chat);
-      const thinkingParts = [];
-
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const data = await ollamaChat(model, messages, tools, true);
-        const assistantMessage = data?.message;
-        if (!assistantMessage) throw new Error('Ollama returned no message');
-
-        const roundThinking = String(assistantMessage.thinking || '').trim();
-        if (roundThinking) thinkingParts.push(roundThinking);
-
-        const toolCalls = Array.isArray(assistantMessage.tool_calls) ? assistantMessage.tool_calls : [];
+        const assistantMessage = await streamRound(model, messages, tools, (type, delta) => {
+          appendSegment(botMessage, liveUi, type, delta, round);
+        });
+        const toolCalls = assistantMessage.tool_calls;
         if (!toolCalls.length) {
-          const text = String(assistantMessage.content || '').trim();
-          if (!text) throw new Error('Ollama returned an empty response');
-          return { text, thinking: thinkingParts.join('\n\n') };
+          botMessage.text = botMessage.segments.filter(part => part.type === 'text').map(part => part.text).join('');
+          if (!botMessage.text.trim() && !botMessage.segments.some(part => part.type === 'thinking')) throw new Error('Ollama returned an empty response');
+          return;
         }
 
-        const assistantHistoryMessage = {
-          role: 'assistant',
-          content: String(assistantMessage.content || ''),
-          tool_calls: toolCalls
+        const historyMessage = {
+          role:'assistant',
+          content:assistantMessage.content || '',
+          tool_calls:toolCalls
         };
-        if (assistantMessage.thinking) assistantHistoryMessage.thinking = String(assistantMessage.thinking);
-        messages.push(assistantHistoryMessage);
+        if (assistantMessage.thinking) historyMessage.thinking = assistantMessage.thinking;
+        messages.push(historyMessage);
 
         for (const call of toolCalls) {
           const name = call?.function?.name;
           const args = call?.function?.arguments || {};
           const result = await window.RogerVIBTools.run(name, args);
-          messages.push({
-            role: 'tool',
-            tool_name: String(name || 'unknown_tool'),
-            content: JSON.stringify(result)
-          });
+          messages.push({ role:'tool', tool_name:String(name || 'unknown_tool'), content:JSON.stringify(result) });
         }
       }
-
       throw new Error(`tool loop exceeded ${MAX_TOOL_ROUNDS} rounds`);
     }
 
@@ -426,72 +468,75 @@ Answer naturally and directly after using any needed tools.`;
       const chat = activeChat();
       const model = currentModel();
       if (!text || !chat || isSending) return;
-
       if (!model) {
-        setConnectionMessage('No Ollama model is available. Start Ollama or select a pinned Ollama cloud model.');
+        setConnectionMessage('No Ollama model is available. Start Ollama or select a pinned model.');
         return;
       }
 
       const targetChatId = chat.id;
       chat.model = model;
-      chat.messages.push({ role: 'user', text, thinking: '' });
+      chat.messages.push({ role:'user', text, segments:[], streaming:false });
       if (chat.title === 'New conversation') chat.title = text.length > 28 ? `${text.slice(0, 28)}…` : text;
-
       saveChats();
       renderChatList();
       renderConversation();
       messageInput.value = '';
       resizeInput();
 
+      // Deterministic games can consume chat input directly. Wordle guesses update immediately without an LLM round trip.
+      try {
+        const gameResult = await window.RogerVIBWidgets?.handleChatInput?.(text);
+        if (gameResult?.handled) {
+          if (gameResult.bot_text) chat.messages.push({ role:'bot', text:String(gameResult.bot_text), segments:[{type:'text', text:String(gameResult.bot_text), round:0}], streaming:false });
+          saveChats();
+          renderConversation();
+          window.RogerVIBWidgets?.renderActiveWidgets?.();
+          messageInput.focus();
+          return;
+        }
+      } catch (error) {
+        console.warn('Game input routing failed; falling back to Ollama:', error);
+      }
+
       isSending = true;
       sendButton.disabled = true;
       modelPicker.disabled = true;
-      setConnectionMessage(`Thinking with ${model} • tools + widgets available…`);
+      setConnectionMessage(`Streaming ${model} • thinking + tools live…`);
+
+      const botMessage = { role:'bot', text:'', segments:[], streaming:true };
+      chat.messages.push(botMessage);
+      const rendered = renderMessage(botMessage);
+      const liveUi = { ...rendered, parts:[] };
+      emptyState.classList.add('hidden');
 
       try {
-        const target = chats.find(item => item.id === targetChatId);
-        if (!target) return;
-        const reply = await askOllama(target, model);
-        target.messages.push({ role: 'bot', text: reply.text, thinking: reply.thinking || '' });
-        saveChats();
+        await askOllama(chat, model, botMessage, liveUi);
       } catch (error) {
         console.error('Ollama chat failed:', error);
-        const target = chats.find(item => item.id === targetChatId);
-        if (target) {
-          target.messages.push({
-            role: 'bot',
-            text: `Ollama error: ${error.message}. Make sure Ollama is running, the selected model is available, and this page is allowed to connect to localhost:11434.`,
-            thinking: ''
-          });
-          saveChats();
-        }
+        appendSegment(botMessage, liveUi, 'text', `Ollama error: ${error.message}. Make sure Ollama is running, the selected model is available, and this page is allowed to connect to localhost:11434.`, 999);
+        botMessage.text = botMessage.segments.filter(part => part.type === 'text').map(part => part.text).join('');
       } finally {
+        botMessage.streaming = false;
+        finishLiveUi(liveUi);
+        saveChats();
         isSending = false;
         sendButton.disabled = false;
         modelPicker.disabled = !availableModels.length;
-        setConnectionMessage(availableModels.length
-          ? `Connected to Ollama • using ${currentModel()} • ${window.RogerVIBTools?.registry?.size || 0} tools • thinking supported`
-          : 'Ollama is unavailable.');
-        if (activeChatId === targetChatId) renderConversation();
+        setConnectionMessage(`Connected to Ollama • using ${currentModel()} • ${window.RogerVIBTools?.registry?.size || 0} tools • live thinking`);
         renderChatList();
+        window.RogerVIBWidgets?.renderActiveWidgets?.();
         messageInput.focus();
       }
     }
 
     renderChatList();
     renderConversation();
-    loadOllamaModels().then(() => {
-      renderConversation();
-      renderChatList();
-    });
+    loadOllamaModels().then(() => { renderConversation(); renderChatList(); });
 
     chatForm.addEventListener('submit', event => { event.preventDefault(); sendMessage(); });
     messageInput.addEventListener('input', resizeInput);
     messageInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
-      }
+      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }
     });
     newChatButton.addEventListener('click', createNewChat);
     copyChatButton.addEventListener('click', copyCurrentChat);
@@ -500,7 +545,7 @@ Answer naturally and directly after using any needed tools.`;
       if (!chat || !modelPicker.value) return;
       chat.model = modelPicker.value;
       saveChats();
-      setConnectionMessage(`Connected to Ollama • using ${chat.model} • ${window.RogerVIBTools?.registry?.size || 0} tools • thinking supported`);
+      setConnectionMessage(`Connected to Ollama • using ${chat.model} • ${window.RogerVIBTools?.registry?.size || 0} tools • live thinking`);
       messageInput.focus();
     });
     collapseButton.addEventListener('click', () => {
