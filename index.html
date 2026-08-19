@@ -7,7 +7,8 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB</title>
-  <link rel="stylesheet" href="styles.css?v=0.8.0" />
+  <link rel="stylesheet" href="styles.css?v=0.9.0" />
+  <link rel="stylesheet" href="widgets.css?v=0.9.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -54,16 +55,17 @@
             </div>
           </div>
         </form>
-        <div class="disclaimer">RogerVIB uses your local Ollama models. Tools are supplied by RogerVIB.</div>
+        <div class="disclaimer">RogerVIB uses your local Ollama models. Tools and safe widgets are supplied by RogerVIB.</div>
       </div>
     </main>
   </div>
 
   <!-- RogerVIB no longer loads any built-in/custom AI model. -->
-  <!-- These scripts only define tool implementations that Ollama models can call. -->
-  <script src="tools/tools.js?v=0.8.0"></script>
-  <script src="tools/calculator.js?v=0.8.0"></script>
-  <script src="tools/web-search.js?v=0.8.0"></script>
-  <script src="main.js?v=0.8.0"></script>
+  <!-- These scripts only define tool implementations and safe UI widgets that Ollama models can call. -->
+  <script src="tools/tools.js?v=0.9.0"></script>
+  <script src="tools/calculator.js?v=0.9.0"></script>
+  <script src="tools/web-search.js?v=0.9.0"></script>
+  <script src="tools/widgets.js?v=0.9.0"></script>
+  <script src="main.js?v=0.9.0"></script>
 </body>
 </html>
