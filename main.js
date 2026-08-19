@@ -1,51 +1,10 @@
 // RogerVIB shared app/UI layer.
-// Models live in /models and register themselves with RogerVIB.registerModel().
+// AI responses are provided by a local Ollama server.
 
 (() => {
   const STORAGE_KEY = 'rogervib_chats_v1';
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
-  const DEFAULT_MODEL = 'cool';
-  const models = new Map();
-
-  function normalize(text) {
-    return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  }
-
-  function simpleMath(input) {
-    const cleaned = String(input).trim().replace(/[×x]/gi, '*').replace(/÷/g, '/');
-    const match = cleaned.match(/^(-?\d+(?:\.\d+)?)\s*([+\-*\/])\s*(-?\d+(?:\.\d+)?)\??$/);
-    if (!match) return null;
-    const a = Number(match[1]);
-    const b = Number(match[3]);
-    let result;
-    if (match[2] === '+') result = a + b;
-    if (match[2] === '-') result = a - b;
-    if (match[2] === '*') result = a * b;
-    if (match[2] === '/') {
-      if (b === 0) return 'no. you cannot divide by zero and escape the consequences';
-      result = a / b;
-    }
-    if (!Number.isFinite(result)) return null;
-    return String(Number.isInteger(result) ? result : Number(result.toFixed(8)));
-  }
-
-  function registerModel(model) {
-    if (!model?.id || typeof model.reply !== 'function') throw new Error('Invalid RogerVIB model');
-    models.set(model.id, model);
-  }
-
-  function getModel(id) {
-    return models.get(id) || models.get(DEFAULT_MODEL) || [...models.values()][0];
-  }
-
-  window.RogerVIB = {
-    registerModel,
-    getModel,
-    models,
-    normalize,
-    simpleMath,
-    random(list) { return list[Math.floor(Math.random() * list.length)]; }
-  };
+  const OLLAMA_BASE_URL = 'http://localhost:11434';
 
   window.addEventListener('DOMContentLoaded', () => {
     const chatForm = document.getElementById('chatForm');
@@ -60,18 +19,19 @@
     const sidebar = document.querySelector('.sidebar');
     const chatList = document.getElementById('chatList');
     const modelPicker = document.getElementById('modelPicker');
+    const sendButton = document.getElementById('sendButton');
+
+    let availableModels = [];
+    let copyFeedbackTimer = null;
+    let isSending = false;
 
     function makeId() {
       if (window.crypto?.randomUUID) return window.crypto.randomUUID();
       return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
 
-    function validModel(id) {
-      return models.has(id) ? id : (models.has(DEFAULT_MODEL) ? DEFAULT_MODEL : [...models.keys()][0]);
-    }
-
-    function createChatObject(model = DEFAULT_MODEL) {
-      return { id: makeId(), title: 'New conversation', model: validModel(model), messages: [] };
+    function createChatObject(model = '') {
+      return { id: makeId(), title: 'New conversation', model, messages: [] };
     }
 
     function loadChats() {
@@ -81,7 +41,7 @@
         return parsed.map(chat => ({
           id: chat.id || makeId(),
           title: chat.title || 'New conversation',
-          model: validModel(chat.model),
+          model: typeof chat.model === 'string' ? chat.model : '',
           messages: Array.isArray(chat.messages) ? chat.messages : []
         }));
       } catch {
@@ -91,7 +51,6 @@
 
     let chats = loadChats();
     let activeChatId = localStorage.getItem(ACTIVE_CHAT_KEY);
-    let copyFeedbackTimer = null;
 
     if (!chats.length) {
       const first = createChatObject();
@@ -109,14 +68,60 @@
       return chats.find(chat => chat.id === activeChatId);
     }
 
-    function buildModelPicker() {
-      modelPicker.innerHTML = '';
-      const ordered = [...models.values()].sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
-      for (const model of ordered) {
-        const option = document.createElement('option');
-        option.value = model.id;
-        option.textContent = model.name;
-        modelPicker.appendChild(option);
+    function currentModel() {
+      const chat = activeChat();
+      if (chat?.model && availableModels.includes(chat.model)) return chat.model;
+      return modelPicker.value || availableModels[0] || '';
+    }
+
+    function setConnectionMessage(text) {
+      modelDescription.textContent = text;
+    }
+
+    async function loadOllamaModels() {
+      modelPicker.disabled = true;
+      modelPicker.innerHTML = '<option>Connecting to Ollama…</option>';
+      setConnectionMessage(`Connecting to Ollama at ${OLLAMA_BASE_URL}…`);
+
+      try {
+        const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
+        if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
+
+        const data = await response.json();
+        availableModels = Array.isArray(data.models)
+          ? data.models.map(item => item.name || item.model).filter(Boolean)
+          : [];
+
+        modelPicker.innerHTML = '';
+
+        if (!availableModels.length) {
+          const option = document.createElement('option');
+          option.textContent = 'No Ollama models installed';
+          option.value = '';
+          modelPicker.appendChild(option);
+          setConnectionMessage('Ollama is running, but there are no installed models yet.');
+          return;
+        }
+
+        for (const modelName of availableModels) {
+          const option = document.createElement('option');
+          option.value = modelName;
+          option.textContent = modelName;
+          modelPicker.appendChild(option);
+        }
+
+        const chat = activeChat();
+        if (!chat.model || !availableModels.includes(chat.model)) chat.model = availableModels[0];
+        modelPicker.value = chat.model;
+        modelPicker.disabled = false;
+        setConnectionMessage(`Connected to Ollama • ${availableModels.length} model${availableModels.length === 1 ? '' : 's'} available`);
+        saveChats();
+      } catch (error) {
+        console.error('Could not connect to Ollama:', error);
+        availableModels = [];
+        modelPicker.innerHTML = '<option value="">Ollama unavailable</option>';
+        modelPicker.disabled = true;
+        setConnectionMessage('Could not reach Ollama on localhost:11434. Make sure Ollama is running and this page origin is allowed by Ollama.');
       }
     }
 
@@ -141,18 +146,16 @@
       conversation.appendChild(row);
     }
 
-    function updateModelDescription() {
-      const model = getModel(modelPicker.value);
-      modelDescription.textContent = model?.description || '';
-    }
-
     function renderConversation() {
       conversation.querySelectorAll('.message-row').forEach(node => node.remove());
       const chat = activeChat();
       if (!chat) return;
-      chat.model = validModel(chat.model);
-      modelPicker.value = chat.model;
-      updateModelDescription();
+
+      if (availableModels.length) {
+        if (!availableModels.includes(chat.model)) chat.model = availableModels[0];
+        modelPicker.value = chat.model;
+      }
+
       emptyState.classList.toggle('hidden', chat.messages.length > 0);
       copyChatButton.disabled = chat.messages.length === 0;
       for (const message of chat.messages) renderMessage(message.text, message.role);
@@ -203,7 +206,7 @@
       const wasActive = id === activeChatId;
       chats.splice(index, 1);
       if (!chats.length) {
-        const replacement = createChatObject();
+        const replacement = createChatObject(availableModels[0] || '');
         chats.push(replacement);
         activeChatId = replacement.id;
       } else if (wasActive) {
@@ -215,7 +218,7 @@
     }
 
     function createNewChat() {
-      const chat = createChatObject();
+      const chat = createChatObject(currentModel());
       chats.unshift(chat);
       activeChatId = chat.id;
       saveChats();
@@ -274,43 +277,101 @@
       }
     }
 
+    function ollamaMessages(chat) {
+      return chat.messages.map(message => ({
+        role: message.role === 'bot' ? 'assistant' : 'user',
+        content: String(message.text)
+      }));
+    }
+
+    async function askOllama(chat, model) {
+      const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: ollamaMessages(chat),
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const errorBody = await response.json();
+          detail = errorBody?.error ? `: ${errorBody.error}` : '';
+        } catch {}
+        throw new Error(`Ollama returned HTTP ${response.status}${detail}`);
+      }
+
+      const data = await response.json();
+      const text = data?.message?.content;
+      if (typeof text !== 'string' || !text.trim()) throw new Error('Ollama returned an empty response');
+      return text;
+    }
+
     async function sendMessage() {
       const text = messageInput.value.trim();
       const chat = activeChat();
-      if (!text || !chat) return;
+      const model = currentModel();
+      if (!text || !chat || isSending) return;
+
+      if (!model) {
+        setConnectionMessage('No Ollama model is available. Start Ollama and install a model first.');
+        return;
+      }
 
       const targetChatId = chat.id;
-      const modelAtSend = chat.model;
+      chat.model = model;
       chat.messages.push({ role: 'user', text });
       if (chat.title === 'New conversation') chat.title = text.length > 28 ? `${text.slice(0, 28)}…` : text;
+
       saveChats();
       renderChatList();
       renderConversation();
       messageInput.value = '';
       resizeInput();
 
-      window.setTimeout(async () => {
+      isSending = true;
+      sendButton.disabled = true;
+      modelPicker.disabled = true;
+      setConnectionMessage(`Thinking with ${model}…`);
+
+      try {
         const target = chats.find(item => item.id === targetChatId);
         if (!target) return;
-        const model = getModel(modelAtSend);
-        let reply = 'model missing. incredible.';
-        try {
-          reply = await model.reply(text, { chat: target, chats });
-        } catch (error) {
-          console.error(error);
-          reply = 'my brain did a thing it was not supposed to do';
-        }
-        target.messages.push({ role: 'bot', text: String(reply) });
+        const reply = await askOllama(target, model);
+        target.messages.push({ role: 'bot', text: reply });
         saveChats();
+      } catch (error) {
+        console.error('Ollama chat failed:', error);
+        const target = chats.find(item => item.id === targetChatId);
+        if (target) {
+          target.messages.push({
+            role: 'bot',
+            text: `Ollama error: ${error.message}. Make sure Ollama is running and this page is allowed to connect to localhost:11434.`
+          });
+          saveChats();
+        }
+      } finally {
+        isSending = false;
+        sendButton.disabled = false;
+        modelPicker.disabled = !availableModels.length;
+        setConnectionMessage(availableModels.length
+          ? `Connected to Ollama • using ${currentModel()}`
+          : 'Ollama is unavailable.');
         if (activeChatId === targetChatId) renderConversation();
         renderChatList();
-      }, 250);
+        messageInput.focus();
+      }
     }
 
-    buildModelPicker();
-    saveChats();
     renderChatList();
     renderConversation();
+    loadOllamaModels().then(() => {
+      renderConversation();
+      renderChatList();
+    });
 
     chatForm.addEventListener('submit', event => { event.preventDefault(); sendMessage(); });
     messageInput.addEventListener('input', resizeInput);
@@ -324,10 +385,10 @@
     copyChatButton.addEventListener('click', copyCurrentChat);
     modelPicker.addEventListener('change', () => {
       const chat = activeChat();
-      if (!chat) return;
-      chat.model = validModel(modelPicker.value);
+      if (!chat || !modelPicker.value) return;
+      chat.model = modelPicker.value;
       saveChats();
-      updateModelDescription();
+      setConnectionMessage(`Connected to Ollama • using ${chat.model}`);
       messageInput.focus();
     });
     collapseButton.addEventListener('click', () => {
