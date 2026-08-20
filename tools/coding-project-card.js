@@ -1,20 +1,23 @@
 // Persistent recovery card for a RogerVIB Coding project after it has been edited.
+// The card is chat-specific and rendered at the bot turn that actually worked on it.
 (() => {
   const STORAGE_KEY = 'rogervib_coding_workspace_v2';
+  const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
+  const ANCHOR_KEY = 'rogervib_coding_anchor_v1';
   const STARTER = {
-    'index.html': `<!doctype html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>RogerVIB Preview</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <h1>Hello from RogerVIB 👋</h1>\n  <script src="script.js"></script>\n</body>\n</html>`,
+    'index.html': `<!doctype html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>RogerVIB Preview</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <h1>Hello from RogerVIB</h1>\n  <script src="script.js"></script>\n</body>\n</html>`,
     'styles.css': `body {\n  font-family: system-ui, sans-serif;\n  padding: 2rem;\n  background: #f7f7fb;\n  color: #17171b;\n}`,
     'script.js': `console.log('RogerVIB preview ready');`
   };
   let rendering = false;
   let timer = null;
 
-  function readState() {
-    try {
-      const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      return value && typeof value === 'object' ? value : {};
-    } catch { return {}; }
+  const activeChatId = () => localStorage.getItem(ACTIVE_CHAT_KEY) || 'default';
+  function readJson(key, fallback = {}) {
+    try { return JSON.parse(localStorage.getItem(key) || '') ?? fallback; }
+    catch { return fallback; }
   }
+  function readState() { return readJson(STORAGE_KEY, {}); }
 
   function projectWasEdited(state) {
     const files = state.files && typeof state.files === 'object' && !Array.isArray(state.files) ? state.files : null;
@@ -27,7 +30,7 @@
 
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(renderCard, 50);
+    timer = setTimeout(renderCard, 25);
   }
 
   function renderCard() {
@@ -37,6 +40,15 @@
     rendering = true;
     conversation.querySelectorAll('.coding-project-card-row').forEach(node => node.remove());
 
+    const anchors = readJson(ANCHOR_KEY, {});
+    const anchorIndex = anchors[activeChatId()];
+    const botRows = [...conversation.querySelectorAll('.message-row.bot')];
+    const anchorRow = Number.isInteger(anchorIndex) ? botRows[anchorIndex] : null;
+
+    // No anchor in this chat = no card in this chat. This prevents old projects
+    // from appearing at the bottom of a brand-new conversation.
+    if (!anchorRow) { rendering = false; return; }
+
     const state = readState();
     const files = state.files && typeof state.files === 'object' && !Array.isArray(state.files) ? state.files : null;
     const names = files ? Object.keys(files) : [];
@@ -44,6 +56,7 @@
 
     const row = document.createElement('div');
     row.className = 'coding-project-card-row';
+    row.dataset.anchorBotIndex = String(anchorIndex);
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'coding-project-card';
@@ -67,7 +80,7 @@
     card.append(icon, text, action);
     card.addEventListener('click', () => window.RogerVIBCoding?.openWorkspace?.({title: state.title || 'Coding Project'}));
     row.appendChild(card);
-    conversation.appendChild(row);
+    conversation.insertBefore(row, anchorRow);
     rendering = false;
   }
 
@@ -91,6 +104,8 @@
     schedule();
   });
 
-  window.addEventListener('storage', event => { if (event.key === STORAGE_KEY) schedule(); });
+  window.addEventListener('storage', event => {
+    if ([STORAGE_KEY, ACTIVE_CHAT_KEY, ANCHOR_KEY].includes(event.key)) schedule();
+  });
   window.addEventListener('rogervib:coding-updated', schedule);
 })();
