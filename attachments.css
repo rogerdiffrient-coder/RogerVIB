@@ -6,6 +6,9 @@
 .attachment-remove:hover { background:#111; }
 .sent-attachment-strip { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; margin:0 0 7px; }
 .sent-attachment-strip img { max-width:260px; max-height:220px; object-fit:cover; border-radius:14px; border:1px solid #44464d; background:#202126; }
+.composer-wrap { position:relative; }
+.attachment-drop-overlay { position:absolute; inset:0; z-index:30; border:2px dashed #8d8f99; border-radius:28px; background:rgba(28,29,34,.92); color:#eeeef2; font-size:18px; font-weight:700; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transform:scale(.985); transition:opacity .12s ease,transform .12s ease; }
+.composer-wrap.attachment-dragging .attachment-drop-overlay { opacity:1; transform:scale(1); }
 @media (max-width:760px) {
   .sent-attachment-strip img { max-width:min(68vw,240px); max-height:200px; }
 }
