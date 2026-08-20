@@ -10,7 +10,6 @@
   const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
   let pending = [];
-  let activeSend = null;
   const nativeFetch = window.fetch.bind(window);
 
   const activeChatId = () => localStorage.getItem(ACTIVE_CHAT_KEY) || 'default';
@@ -184,12 +183,6 @@
       const chatId = activeChatId();
       const userIndex = currentUserCount();
       const attachments = pending.map(item => ({ ...item }));
-      activeSend = {
-        chatId,
-        userIndex,
-        expectedUserCount: userIndex + 1,
-        attachments
-      };
       storeSentAttachments(chatId, userIndex, attachments);
       pending = [];
       renderPending();
@@ -205,18 +198,23 @@
 
   window.fetch = async function RogerVIBAttachmentFetch(input, init = {}) {
     const url = typeof input === 'string' ? input : input?.url || '';
-    if (!activeSend || !url.includes('localhost:11434/api/chat') || typeof init?.body !== 'string') {
+    if (!url.includes('localhost:11434/api/chat') || typeof init?.body !== 'string') {
       return nativeFetch(input, init);
     }
 
     try {
       const payload = JSON.parse(init.body);
       if (!Array.isArray(payload.messages)) return nativeFetch(input, init);
+
       const users = payload.messages.filter(message => message?.role === 'user');
-      const latest = users.at(-1);
-      if (latest && users.length === activeSend.expectedUserCount) {
-        latest.images = activeSend.attachments.map(item => item.base64);
+      const store = readSession();
+      const records = Array.isArray(store[activeChatId()]) ? store[activeChatId()] : [];
+      for (const record of records) {
+        const target = users[record.userIndex];
+        if (!target || !Array.isArray(record.attachments) || !record.attachments.length) continue;
+        target.images = record.attachments.map(item => dataUrlToBase64(item.dataUrl)).filter(Boolean);
       }
+
       return nativeFetch(input, { ...init, body: JSON.stringify(payload) });
     } catch {
       return nativeFetch(input, init);
