@@ -1,4 +1,4 @@
-.coding-workspace { width:min(46vw,760px); min-width:420px; height:100vh; background:#1d1f25; border-left:1px solid #383b45; display:flex; flex-direction:column; position:relative; z-index:20; box-shadow:-14px 0 36px rgba(0,0,0,.22); }
+.coding-workspace { width:min(48vw,780px); min-width:440px; height:100vh; background:#1d1f25; border-left:1px solid #383b45; display:flex; flex-direction:column; position:relative; z-index:20; box-shadow:-14px 0 36px rgba(0,0,0,.22); }
 .coding-workspace.hidden { display:none; }
 .coding-workspace-header { height:58px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 12px 0 16px; border-bottom:1px solid #343740; background:#202229; }
 .coding-workspace-heading { display:flex; align-items:baseline; gap:10px; min-width:0; }
@@ -7,20 +7,35 @@
 .coding-workspace-header-actions { display:flex; gap:4px; }
 .coding-workspace-icon-button { width:34px; height:34px; border:0; border-radius:9px; background:transparent; color:#d8d9df; cursor:pointer; font-size:20px; }
 .coding-workspace-icon-button:hover { background:#30333c; }
-.coding-workspace-body { flex:1; min-height:0; display:grid; grid-template-rows:minmax(220px,1fr) minmax(220px,1fr); }
+.coding-working-row { min-height:30px; display:flex; align-items:center; padding:0 14px; border-bottom:1px solid #343740; background:#1b1d23; }
+.coding-working-label { color:#8f929c; font-size:12px; font-weight:650; }
+.coding-working-label.active { color:#f0c96a; }
+.coding-working-label.active::before { content:'●'; margin-right:7px; animation:codingPulse .8s ease-in-out infinite alternate; }
+@keyframes codingPulse { from { opacity:.3; } to { opacity:1; } }
+.coding-workspace-body { flex:1; min-height:0; display:grid; grid-template-rows:minmax(240px,1fr) minmax(220px,1fr); }
 .coding-editor-section,.coding-preview-section { min-height:0; display:flex; flex-direction:column; }
 .coding-editor-section { border-bottom:1px solid #3a3d46; }
+.coding-code-top { height:34px; flex:0 0 auto; display:grid; grid-template-columns:150px 1fr; align-items:center; background:#272a32; border-bottom:1px solid #363943; }
+.coding-pane-label-inline { padding:0 12px; font-size:10px; font-weight:800; letter-spacing:.12em; color:#aeb0b9; }
+.coding-pane-label-inline + .coding-pane-label-inline { border-left:1px solid #363943; }
+.coding-editor-grid { flex:1; min-height:0; display:grid; grid-template-columns:150px 1fr; }
+.coding-file-list { min-width:0; overflow:auto; background:#202229; border-right:1px solid #363943; padding:7px; }
+.coding-file { width:100%; border:0; background:transparent; color:#b8bbc4; text-align:left; border-radius:7px; padding:7px 8px; cursor:pointer; font:12px/1.25 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.coding-file:hover { background:#2a2d35; color:#fff; }
+.coding-file.active { background:#343844; color:#fff; }
 .coding-pane-label { height:34px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; padding:0 12px; font-size:10px; font-weight:800; letter-spacing:.12em; color:#aeb0b9; background:#272a32; border-bottom:1px solid #363943; }
-.coding-workspace-editor { flex:1; width:100%; min-height:0; resize:none; border:0; border-radius:0; outline:none; padding:14px 16px; background:#16181d; color:#eceef4; font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; tab-size:2; }
+.coding-workspace-editor { width:100%; height:100%; min-height:0; resize:none; border:0; border-radius:0; outline:none; padding:14px 16px; background:#16181d; color:#eceef4; font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; tab-size:2; }
 .coding-workspace-editor::selection { background:#44506d; }
 .coding-preview-section { background:#fff; }
 .coding-preview-label { color:#aeb0b9; background:#272a32; }
 .coding-live-dot { color:#66d08b; font-size:12px; letter-spacing:0; }
+.coding-working .coding-live-dot { color:#f0c96a; }
 .coding-workspace-preview { flex:1; width:100%; min-height:0; border:0; background:#fff; }
 body.coding-workspace-open .main-panel { min-width:360px; }
 @media (max-width:950px) {
-  .coding-workspace { position:absolute; right:0; top:0; width:min(88vw,700px); min-width:0; }
+  .coding-workspace { position:absolute; right:0; top:0; width:min(90vw,720px); min-width:0; }
 }
 @media (max-width:620px) {
   .coding-workspace { width:100vw; }
+  .coding-code-top,.coding-editor-grid { grid-template-columns:110px 1fr; }
 }
