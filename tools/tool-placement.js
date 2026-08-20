@@ -1,5 +1,6 @@
 // Keep tool-created UI beside the bot turn that actually created it.
-// Unanchored legacy UI is hidden instead of falling to the bottom of the chat.
+// Widgets created inside a tool are detected automatically, even if the tool
+// does not explicitly return a widget_id (calculator does this).
 (() => {
   if (!window.RogerVIBTools) return;
   const WIDGET_KEY = 'rogervib_widgets_v1';
@@ -17,12 +18,21 @@
   }
   function write(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 
+  function widgetList(id = chatId()) {
+    const all = read(WIDGET_KEY, {});
+    return Array.isArray(all[id]) ? all[id] : [];
+  }
+
+  function widgetIds(id = chatId()) {
+    return new Set(widgetList(id).map(item => String(item?.id || '')).filter(Boolean));
+  }
+
   function rememberWidgetAnchor(widgetId, index) {
     if (!widgetId) return;
     const all = read(WIDGET_KEY, {});
     const id = chatId();
     const list = Array.isArray(all[id]) ? all[id] : [];
-    const widget = list.find(item => item?.id === widgetId);
+    const widget = list.find(item => String(item?.id) === String(widgetId));
     if (!widget) return;
     widget.anchorBotIndex = index;
     all[id] = list;
@@ -35,13 +45,15 @@
     write(CODING_ANCHOR_KEY, all);
   }
 
+  function isActiveWordle(spec) {
+    return !spec?.closed && spec?.type === 'game' && String(spec?.data?.game || '').toLowerCase() === 'wordle' && !spec?.data?.done;
+  }
+
   function placeEverything() {
     const conversation = document.getElementById('conversation');
     if (!conversation) return;
     const rows = botRows();
 
-    // Widgets: if they have an anchor, put them immediately BEFORE that bot row.
-    // If they predate turn anchoring, do not dump them at the bottom.
     const allWidgets = read(WIDGET_KEY, {});
     const widgets = Array.isArray(allWidgets[chatId()]) ? allWidgets[chatId()] : [];
     for (const spec of widgets) {
@@ -49,16 +61,24 @@
       if (!ui) continue;
       const index = Number.isInteger(spec?.anchorBotIndex) ? spec.anchorBotIndex : null;
       const anchor = index !== null ? rows[index] : null;
+
       if (!anchor) {
-        ui.style.display = 'none';
+        // A live game should never visually vanish just because its old message
+        // anchor disappeared during a chat rerender. Keep the existing state and
+        // move the board to the current bottom instead.
+        if (isActiveWordle(spec)) {
+          ui.style.display = '';
+          if (conversation.lastElementChild !== ui) conversation.appendChild(ui);
+        } else {
+          ui.style.display = 'none';
+        }
         continue;
       }
+
       ui.style.display = '';
       if (ui.nextElementSibling !== anchor) conversation.insertBefore(ui, anchor);
     }
 
-    // Coding recovery card is chat-specific. Never show a project's card in a
-    // different/new chat just because the project exists in localStorage.
     const codingAnchors = read(CODING_ANCHOR_KEY, {});
     const codingIndex = codingAnchors[chatId()];
     const codingCard = conversation.querySelector('.coding-project-card-row');
@@ -73,14 +93,29 @@
   }
 
   window.RogerVIBTools.run = async function(name, args = {}) {
+    const id = chatId();
     const index = currentBotIndex();
-    window.RogerVIBCurrentToolAnchor = { chatId: chatId(), botIndex: index, tool: name };
+    const beforeIds = widgetIds(id);
+
+    window.RogerVIBCurrentToolAnchor = { chatId:id, botIndex:index, tool:name };
     const result = await originalRun(name, args);
-    const widgetId = result?.result?.widget_id;
-    if (widgetId) rememberWidgetAnchor(widgetId, index);
+
+    // Explicit widget ids still work.
+    const explicitWidgetId = result?.result?.widget_id;
+    if (explicitWidgetId) rememberWidgetAnchor(explicitWidgetId, index);
+
+    // More importantly: detect widgets that the tool created internally.
+    // This catches calculator -> RogerVIBWidgets.saveWidget(...) even though
+    // calculator's actual tool result is just a number/string.
+    for (const spec of widgetList(id)) {
+      const widgetId = String(spec?.id || '');
+      if (widgetId && !beforeIds.has(widgetId)) rememberWidgetAnchor(widgetId, index);
+    }
+
     if (name === 'coding_workspace' && ['write','delete','rename','preview','open'].includes(String(args?.action || ''))) {
       rememberCodingAnchor(index);
     }
+
     window.RogerVIBCurrentToolAnchor = null;
     placeEverything();
     requestAnimationFrame(placeEverything);
