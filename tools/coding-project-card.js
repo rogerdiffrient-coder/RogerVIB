@@ -1,6 +1,11 @@
-// Persistent recovery card for the current RogerVIB Coding project.
+// Persistent recovery card for a RogerVIB Coding project after it has been edited.
 (() => {
   const STORAGE_KEY = 'rogervib_coding_workspace_v2';
+  const STARTER = {
+    'index.html': `<!doctype html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>RogerVIB Preview</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <h1>Hello from RogerVIB 👋</h1>\n  <script src="script.js"></script>\n</body>\n</html>`,
+    'styles.css': `body {\n  font-family: system-ui, sans-serif;\n  padding: 2rem;\n  background: #f7f7fb;\n  color: #17171b;\n}`,
+    'script.js': `console.log('RogerVIB preview ready');`
+  };
   let rendering = false;
   let timer = null;
 
@@ -11,9 +16,18 @@
     } catch { return {}; }
   }
 
+  function projectWasEdited(state) {
+    const files = state.files && typeof state.files === 'object' && !Array.isArray(state.files) ? state.files : null;
+    if (!files) return false;
+    const names = Object.keys(files).sort();
+    const starterNames = Object.keys(STARTER).sort();
+    if (names.length !== starterNames.length || names.some((name, i) => name !== starterNames[i])) return true;
+    return names.some(name => String(files[name]) !== String(STARTER[name]));
+  }
+
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(renderCard, 40);
+    timer = setTimeout(renderCard, 50);
   }
 
   function renderCard() {
@@ -26,7 +40,7 @@
     const state = readState();
     const files = state.files && typeof state.files === 'object' && !Array.isArray(state.files) ? state.files : null;
     const names = files ? Object.keys(files) : [];
-    if (!names.length) { rendering = false; return; }
+    if (!names.length || !projectWasEdited(state)) { rendering = false; return; }
 
     const row = document.createElement('div');
     row.className = 'coding-project-card-row';
