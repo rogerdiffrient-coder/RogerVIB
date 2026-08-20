@@ -1,11 +1,18 @@
 // Extra attachment inputs: drag/drop + clipboard paste.
 (() => {
   async function addFiles(files) {
+    const images = [...(files || [])].filter(file => file?.type?.startsWith('image/'));
+    if (!images.length) return;
+    if (window.RogerVIBAttachments?.addFiles) {
+      await window.RogerVIBAttachments.addFiles(images);
+      return;
+    }
+
+    // Fallback for older cached attachment layer.
     const picker = document.getElementById('imageAttachmentPicker');
-    if (!picker || !files?.length) return;
+    if (!picker) return;
     const dt = new DataTransfer();
-    [...files].filter(file => file?.type?.startsWith('image/')).forEach(file => dt.items.add(file));
-    if (!dt.files.length) return;
+    images.forEach(file => dt.items.add(file));
     try {
       picker.files = dt.files;
       picker.dispatchEvent(new Event('change', { bubbles:true }));
@@ -47,7 +54,7 @@
       event.preventDefault();
       dragDepth = 0;
       composer.classList.remove('attachment-dragging');
-      addFiles([...event.dataTransfer.files]);
+      addFiles(event.dataTransfer?.files || []);
     });
 
     input.addEventListener('paste', event => {
@@ -56,6 +63,15 @@
       event.preventDefault();
       addFiles(files);
     });
+
+    // main.js sends directly on Enter instead of dispatching a form submit.
+    // Give image-only Enter sends a text body so they actually leave the composer;
+    // attachments.js then binds the image bytes to the final Ollama payload.
+    input.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.shiftKey) return;
+      if (!window.RogerVIBAttachments?.hasPending?.()) return;
+      if (!input.value.trim()) input.value = 'what is in this image?';
+    }, true);
   }
 
   window.addEventListener('DOMContentLoaded', setup);
