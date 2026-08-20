@@ -20,13 +20,18 @@
     button.textContent = 'Fullscreen';
     button.title = 'Fullscreen preview';
     button.setAttribute('aria-label', 'Fullscreen preview');
+    button.style.width = 'auto';
+    button.style.minWidth = '88px';
+    button.style.padding = '0 10px';
+    button.style.fontSize = '12px';
+    button.style.fontWeight = '700';
 
     function syncLabel() {
-      button.textContent = section.classList.contains('coding-preview-fullscreen') ? 'Exit fullscreen' : 'Fullscreen';
+      const active = document.fullscreenElement === section || section.classList.contains('coding-preview-fullscreen');
+      button.textContent = active ? 'Exit fullscreen' : 'Fullscreen';
     }
 
     button.addEventListener('click', async () => {
-      // Use the browser fullscreen API when available; fall back to a fixed overlay.
       if (document.fullscreenElement === section) {
         try { await document.exitFullscreen(); } catch {}
         section.classList.remove('coding-preview-fullscreen');
@@ -58,7 +63,8 @@
     const observer = new MutationObserver(install);
     observer.observe(document.body, { childList:true, subtree:true });
     const timer = setInterval(() => {
-      if (install() || document.querySelector('.coding-fullscreen-button')) clearInterval(timer);
+      install();
+      if (document.querySelector('.coding-fullscreen-button')) clearInterval(timer);
     }, 100);
   });
 })();
