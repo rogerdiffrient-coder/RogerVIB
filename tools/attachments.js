@@ -1,12 +1,11 @@
 // RogerVIB image attachment layer for Ollama vision-capable models.
-// Images are resized in-browser, previewed, stored for the current session,
-// and attached directly to the final Ollama user message before /api/chat.
+// Keep image bytes lightweight and attach them only to the turn that sends them.
 (() => {
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
   const CHATS_KEY = 'rogervib_chats_v1';
-  const SESSION_KEY = 'rogervib_image_attachments_v2';
+  const SESSION_KEY = 'rogervib_image_attachment_previews_v3';
   const MAX_IMAGES = 4;
-  const MAX_DIMENSION = 1600;
+  const MAX_DIMENSION = 1024;
   const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
   let pending = [];
@@ -19,7 +18,7 @@
   };
   const writeSession = value => {
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(value)); }
-    catch (error) { console.warn('Attachment history could not be persisted:', error); }
+    catch (error) { console.warn('attachment previews could not be persisted:', error); }
   };
 
   function currentUserCount() {
@@ -36,42 +35,61 @@
     return comma >= 0 ? text.slice(comma + 1) : text;
   }
 
-  async function resizeImage(file) {
-    if (!file?.type?.startsWith('image/')) throw new Error('Only image attachments are supported right now.');
-    if (file.size > MAX_FILE_BYTES) throw new Error('That image is too large. Keep images under 12 MB.');
-
+  async function loadImage(file) {
+    if ('createImageBitmap' in window) {
+      try { return await createImageBitmap(file); } catch {}
+    }
     const sourceUrl = URL.createObjectURL(file);
     try {
-      const image = await new Promise((resolve, reject) => {
+      return await new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('Could not read that image.'));
+        img.onerror = () => reject(new Error('could not read that image'));
         img.src = sourceUrl;
       });
-
-      const scale = Math.min(1, MAX_DIMENSION / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
-      const width = Math.max(1, Math.round(image.naturalWidth * scale));
-      const height = Math.max(1, Math.round(image.naturalHeight * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Image processing is unavailable in this browser.');
-      ctx.drawImage(image, 0, 0, width, height);
-
-      const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-      const dataUrl = canvas.toDataURL(mime, mime === 'image/jpeg' ? 0.9 : undefined);
-      return {
-        name: String(file.name || 'image').slice(0, 120),
-        type: mime,
-        dataUrl,
-        base64: dataUrlToBase64(dataUrl),
-        width,
-        height
-      };
     } finally {
-      URL.revokeObjectURL(sourceUrl);
+      setTimeout(() => URL.revokeObjectURL(sourceUrl), 0);
     }
+  }
+
+  async function resizeImage(file) {
+    if (!file?.type?.startsWith('image/')) throw new Error('only image attachments are supported right now');
+    if (file.size > MAX_FILE_BYTES) throw new Error('that image is too large. keep images under 12 MB');
+
+    const image = await loadImage(file);
+    const naturalWidth = image.width || image.naturalWidth || 1;
+    const naturalHeight = image.height || image.naturalHeight || 1;
+    const scale = Math.min(1, MAX_DIMENSION / Math.max(naturalWidth, naturalHeight));
+    const width = Math.max(1, Math.round(naturalWidth * scale));
+    const height = Math.max(1, Math.round(naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha:false });
+    if (!ctx) throw new Error('image processing is unavailable in this browser');
+    ctx.drawImage(image, 0, 0, width, height);
+    image.close?.();
+
+    // Always use JPEG for the model payload. This is dramatically smaller than
+    // re-sending full PNG screenshots and avoids freezing the main thread.
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+
+    // Tiny preview only; never persist model-sized base64 in sessionStorage.
+    const previewCanvas = document.createElement('canvas');
+    const previewScale = Math.min(1, 256 / Math.max(width, height));
+    previewCanvas.width = Math.max(1, Math.round(width * previewScale));
+    previewCanvas.height = Math.max(1, Math.round(height * previewScale));
+    previewCanvas.getContext('2d')?.drawImage(canvas, 0, 0, previewCanvas.width, previewCanvas.height);
+    const previewUrl = previewCanvas.toDataURL('image/jpeg', 0.68);
+
+    return {
+      name:String(file.name || 'image').slice(0,120),
+      type:'image/jpeg',
+      previewUrl,
+      base64:dataUrlToBase64(dataUrl),
+      width,
+      height
+    };
   }
 
   function ensurePendingStrip() {
@@ -91,39 +109,31 @@
     if (!strip) return;
     strip.innerHTML = '';
     strip.classList.toggle('has-attachments', pending.length > 0);
-    pending.forEach((attachment, index) => {
+    pending.forEach((attachment,index) => {
       const chip = document.createElement('div');
       chip.className = 'attachment-preview';
       const img = document.createElement('img');
-      img.src = attachment.dataUrl;
+      img.src = attachment.previewUrl;
       img.alt = attachment.name;
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'attachment-remove';
       remove.textContent = '×';
-      remove.setAttribute('aria-label', `Remove ${attachment.name}`);
-      remove.addEventListener('click', () => {
-        pending.splice(index, 1);
-        renderPending();
-      });
-      chip.append(img, remove);
+      remove.setAttribute('aria-label',`remove ${attachment.name}`);
+      remove.addEventListener('click',() => { pending.splice(index,1); renderPending(); });
+      chip.append(img,remove);
       strip.appendChild(chip);
     });
   }
 
-  function storeSentAttachments(chatId, userIndex, attachments) {
+  function storeSentPreviews(chatId,userIndex,attachments) {
     if (!attachments?.length) return;
     const store = readSession();
     if (!Array.isArray(store[chatId])) store[chatId] = [];
     store[chatId] = store[chatId].filter(item => item?.userIndex !== userIndex);
     store[chatId].push({
       userIndex,
-      attachments: attachments.map(item => ({
-        name:item.name,
-        type:item.type,
-        dataUrl:item.dataUrl,
-        base64:item.base64 || dataUrlToBase64(item.dataUrl)
-      }))
+      attachments:attachments.map(item => ({name:item.name,type:item.type,previewUrl:item.previewUrl}))
     });
     store[chatId] = store[chatId].slice(-12);
     writeSession(store);
@@ -138,75 +148,64 @@
     const userRows = [...conversation.querySelectorAll('.message-row.user')];
     for (const record of records) {
       const row = userRows[record.userIndex];
-      if (!row || !Array.isArray(record.attachments) || !record.attachments.length) continue;
+      if (!row || !record.attachments?.length) continue;
       const stack = row.querySelector('.message-stack') || row;
       const strip = document.createElement('div');
       strip.className = 'sent-attachment-strip';
       for (const attachment of record.attachments) {
         const img = document.createElement('img');
-        img.src = attachment.dataUrl;
-        img.alt = attachment.name || 'Attached image';
+        img.src = attachment.previewUrl;
+        img.alt = attachment.name || 'attached image';
         img.loading = 'lazy';
         strip.appendChild(img);
       }
-      stack.insertBefore(strip, stack.firstChild);
+      stack.insertBefore(strip,stack.firstChild);
     }
-  }
-
-  function imagesFrom(attachments) {
-    return (attachments || [])
-      .map(item => item.base64 || dataUrlToBase64(item.dataUrl))
-      .filter(Boolean);
   }
 
   function applyToPayload(payload) {
     if (!payload || !Array.isArray(payload.messages)) return payload;
     const users = payload.messages.filter(message => message?.role === 'user');
-    const store = readSession();
-    const records = Array.isArray(store[activeChatId()]) ? store[activeChatId()] : [];
-
-    // Restore images for previous turns in this session.
-    for (const record of records) {
-      const target = users[record.userIndex];
-      if (!target || !Array.isArray(record.attachments) || !record.attachments.length) continue;
-      const images = imagesFrom(record.attachments);
-      if (images.length) target.images = images;
-    }
-
-    // Most important bit: bind the currently attached image DIRECTLY to the
-    // last user message in the actual Ollama payload. This does not depend on
-    // whether Enter, requestSubmit(), or a button click initiated the send.
-    const immediate = inFlight.length ? inFlight : pending;
     const lastUser = users.at(-1);
+    const immediate = inFlight.length ? inFlight : pending;
+
+    // IMPORTANT: only attach current images to the current user turn.
+    // Older image bytes are NOT re-injected into every follow-up request.
     if (lastUser && immediate.length) {
-      const images = imagesFrom(immediate);
-      if (images.length) {
-        lastUser.images = images;
-        const userIndex = Math.max(0, users.length - 1);
-        storeSentAttachments(activeChatId(), userIndex, immediate);
-      }
+      lastUser.images = immediate.map(item => item.base64).filter(Boolean);
+      const userIndex = Math.max(0,users.length - 1);
+      storeSentPreviews(activeChatId(),userIndex,immediate);
       inFlight = [];
       pending = [];
-      setTimeout(() => {
-        renderPending();
-        renderSentAttachments();
-      }, 0);
+      setTimeout(() => { renderPending(); renderSentAttachments(); },0);
     }
-
     return payload;
   }
 
   async function addFiles(files) {
     const accepted = [...(files || [])]
       .filter(file => file?.type?.startsWith('image/'))
-      .slice(0, Math.max(0, MAX_IMAGES - pending.length));
+      .slice(0,Math.max(0,MAX_IMAGES - pending.length));
     for (const file of accepted) {
-      try { pending.push(await resizeImage(file)); }
-      catch (error) { window.alert(error.message || String(error)); }
+      try {
+        // Yield before heavy image work so drag/paste UI can paint first.
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        pending.push(await resizeImage(file));
+      } catch (error) { window.alert(error.message || String(error)); }
     }
     renderPending();
     document.getElementById('messageInput')?.focus();
     return pending.length;
+  }
+
+  function prepareForSend() {
+    const input = document.getElementById('messageInput');
+    if (!pending.length) return false;
+    if (input && !input.value.trim()) input.value = 'what is in this image?';
+    inFlight = pending.map(item => ({...item}));
+    pending = [];
+    renderPending();
+    return true;
   }
 
   function setupDom() {
@@ -223,32 +222,21 @@
     picker.id = 'imageAttachmentPicker';
     document.body.appendChild(picker);
 
-    plus.title = 'Attach image';
-    plus.setAttribute('aria-label', 'Attach image');
-    plus.addEventListener('click', () => picker.click());
-
-    picker.addEventListener('change', async () => {
+    plus.title = 'attach image';
+    plus.setAttribute('aria-label','attach image');
+    plus.addEventListener('click',() => picker.click());
+    picker.addEventListener('change',async () => {
       const files = [...picker.files];
       picker.value = '';
       await addFiles(files);
     });
 
-    // Capture before RogerVIB's normal submit handler. Keep a copy as inFlight
-    // so the final fetch wrapper can attach it directly to the final user turn.
-    form.addEventListener('submit', () => {
-      if (!pending.length) return;
-      if (!input.value.trim()) input.value = 'what is in this image?';
-      const chatId = activeChatId();
-      const userIndex = currentUserCount();
-      inFlight = pending.map(item => ({...item}));
-      storeSentAttachments(chatId, userIndex, inFlight);
-      pending = [];
-      renderPending();
-      setTimeout(renderSentAttachments, 30);
-    }, true);
+    // Still support normal form submits, but main.js can also call prepareForSend()
+    // directly for Enter-key sends.
+    form.addEventListener('submit',prepareForSend,true);
 
     const conversation = document.getElementById('conversation');
-    if (conversation) new MutationObserver(renderSentAttachments).observe(conversation, {childList:true,subtree:true});
+    if (conversation) new MutationObserver(renderSentAttachments).observe(conversation,{childList:true,subtree:true});
     renderPending();
     renderSentAttachments();
   }
@@ -257,9 +245,10 @@
     applyToPayload,
     renderSentAttachments,
     addFiles,
-    getPendingCount: () => pending.length,
-    hasPending: () => pending.length > 0 || inFlight.length > 0
+    prepareForSend,
+    getPendingCount:() => pending.length,
+    hasPending:() => pending.length > 0 || inFlight.length > 0
   };
 
-  window.addEventListener('DOMContentLoaded', setupDom);
+  window.addEventListener('DOMContentLoaded',setupDom);
 })();
