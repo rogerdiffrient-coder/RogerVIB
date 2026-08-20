@@ -28,9 +28,14 @@
 .coding-workspace-editor::selection { background:#44506d; }
 .coding-preview-section { background:#fff; }
 .coding-preview-label { color:#aeb0b9; background:#272a32; }
+.coding-preview-actions { display:flex; align-items:center; gap:8px; }
+.coding-fullscreen-button { border:0; background:transparent; color:#d7d9df; cursor:pointer; font-size:16px; line-height:1; width:26px; height:26px; border-radius:6px; }
+.coding-fullscreen-button:hover { background:#353842; }
 .coding-live-dot { color:#66d08b; font-size:12px; letter-spacing:0; }
 .coding-working .coding-live-dot { color:#f0c96a; }
 .coding-workspace-preview { flex:1; width:100%; min-height:0; border:0; background:#fff; }
+.coding-preview-section.coding-preview-fullscreen { position:fixed; inset:18px; z-index:1000; border:1px solid #41444e; border-radius:16px; overflow:hidden; box-shadow:0 24px 90px rgba(0,0,0,.55); background:#fff; }
+.coding-preview-section.coding-preview-fullscreen .coding-preview-label { height:44px; }
 body.coding-workspace-open .main-panel { min-width:360px; }
 
 .coding-project-card-row { width:100%; max-width:940px; margin:14px auto 4px; padding:0 18px; }
@@ -50,4 +55,5 @@ body.coding-workspace-open .main-panel { min-width:360px; }
   .coding-code-top,.coding-editor-grid { grid-template-columns:110px 1fr; }
   .coding-project-card { grid-template-columns:40px minmax(0,1fr); }
   .coding-project-card-open { display:none; }
+  .coding-preview-section.coding-preview-fullscreen { inset:0; border-radius:0; }
 }
