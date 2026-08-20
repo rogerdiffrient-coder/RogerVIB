@@ -3,7 +3,7 @@
 
   RogerVIBTools.register({
     name: 'calculator',
-    description: 'Calculate arithmetic exactly. Use this instead of doing arithmetic mentally when the user asks for a calculation or when precise math is needed.',
+    description: 'Calculate arithmetic exactly. Use this instead of doing arithmetic mentally when the user asks for a calculation or when precise math is needed. RogerVIB automatically shows the result in a calculator widget, so do not call a second calculator display tool unless the user specifically asks for another panel.',
     parameters: {
       type: 'object',
       required: ['expression'],
@@ -20,7 +20,21 @@
       if (!/^[0-9+\-*/().%\s]+$/.test(expression)) throw new Error('unsupported calculator expression');
       const value = Function(`"use strict"; return (${expression})`)();
       if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('calculator produced a non-finite result');
-      return String(Number.isInteger(value) ? value : Number(value.toFixed(10)));
+      const result = String(Number.isInteger(value) ? value : Number(value.toFixed(10)));
+
+      // Visual results are owned by RogerVIB, not left up to the model to remember.
+      try {
+        if (window.RogerVIBWidgets?.saveWidget) {
+          window.RogerVIBWidgets.saveWidget({
+            type: 'calculator',
+            data: { expression, result, title: 'Calculator' }
+          });
+        }
+      } catch (error) {
+        console.warn('Calculator result worked, but its widget could not be shown:', error);
+      }
+
+      return result;
     }
   });
 })();
