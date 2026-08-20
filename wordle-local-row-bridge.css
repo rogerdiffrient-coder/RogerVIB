@@ -1,0 +1,5 @@
+.wordle-local-row { max-width:780px; margin:0 auto 30px; display:flex; gap:14px; align-items:flex-start; }
+.wordle-local-row.user { justify-content:flex-end; }
+.wordle-local-row.user .message-bubble { background:#2f2f2f; border-radius:18px; padding:10px 15px; max-width:70%; }
+.wordle-local-row.bot .message-bubble { padding-top:2px; }
+@media (max-width:760px) { .wordle-local-row.user .message-bubble { max-width:84%; } }
