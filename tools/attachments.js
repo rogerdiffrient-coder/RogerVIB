@@ -1,16 +1,15 @@
 // RogerVIB image attachment layer for Ollama vision-capable models.
-// Images are resized in-browser, previewed in chat, and injected into the
-// matching user message as Ollama REST `images` base64 data.
+// Images are resized in-browser, previewed, stored for the current session,
+// and explicitly attached to the matching Ollama user message.
 (() => {
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
   const CHATS_KEY = 'rogervib_chats_v1';
-  const SESSION_KEY = 'rogervib_image_attachments_v1';
+  const SESSION_KEY = 'rogervib_image_attachments_v2';
   const MAX_IMAGES = 4;
   const MAX_DIMENSION = 1600;
   const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
   let pending = [];
-  const nativeFetch = window.fetch.bind(window);
 
   const activeChatId = () => localStorage.getItem(ACTIVE_CHAT_KEY) || 'default';
   const readSession = () => {
@@ -19,7 +18,7 @@
   };
   const writeSession = value => {
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(value)); }
-    catch (error) { console.warn('Attachment history could not be persisted for this session:', error); }
+    catch (error) { console.warn('Attachment history could not be persisted:', error); }
   };
 
   function currentUserCount() {
@@ -31,8 +30,9 @@
   }
 
   function dataUrlToBase64(dataUrl) {
-    const comma = String(dataUrl || '').indexOf(',');
-    return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+    const text = String(dataUrl || '');
+    const comma = text.indexOf(',');
+    return comma >= 0 ? text.slice(comma + 1) : text;
   }
 
   async function resizeImage(file) {
@@ -58,9 +58,8 @@
       if (!ctx) throw new Error('Image processing is unavailable in this browser.');
       ctx.drawImage(image, 0, 0, width, height);
 
-      const preservePng = file.type === 'image/png';
-      const mime = preservePng ? 'image/png' : 'image/jpeg';
-      const dataUrl = canvas.toDataURL(mime, preservePng ? undefined : 0.9);
+      const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      const dataUrl = canvas.toDataURL(mime, mime === 'image/jpeg' ? 0.9 : undefined);
       return {
         name: String(file.name || 'image').slice(0, 120),
         type: mime,
@@ -117,7 +116,12 @@
     store[chatId] = store[chatId].filter(item => item?.userIndex !== userIndex);
     store[chatId].push({
       userIndex,
-      attachments: attachments.map(item => ({ name:item.name, type:item.type, dataUrl:item.dataUrl }))
+      attachments: attachments.map(item => ({
+        name:item.name,
+        type:item.type,
+        dataUrl:item.dataUrl,
+        base64:item.base64
+      }))
     });
     store[chatId] = store[chatId].slice(-12);
     writeSession(store);
@@ -145,6 +149,23 @@
       }
       stack.insertBefore(strip, stack.firstChild);
     }
+  }
+
+  function applyToPayload(payload) {
+    if (!payload || !Array.isArray(payload.messages)) return payload;
+    const users = payload.messages.filter(message => message?.role === 'user');
+    const store = readSession();
+    const records = Array.isArray(store[activeChatId()]) ? store[activeChatId()] : [];
+
+    for (const record of records) {
+      const target = users[record.userIndex];
+      if (!target || !Array.isArray(record.attachments) || !record.attachments.length) continue;
+      const images = record.attachments
+        .map(item => item.base64 || dataUrlToBase64(item.dataUrl))
+        .filter(Boolean);
+      if (images.length) target.images = images;
+    }
+    return payload;
   }
 
   function setupDom() {
@@ -176,49 +197,28 @@
       input.focus();
     });
 
-    // Capture runs before RogerVIB's normal submit handler.
+    // Capture before RogerVIB's own submit handler adds the user message.
     form.addEventListener('submit', () => {
       if (!pending.length) return;
       if (!input.value.trim()) input.value = 'What is in this image?';
       const chatId = activeChatId();
       const userIndex = currentUserCount();
-      const attachments = pending.map(item => ({ ...item }));
-      storeSentAttachments(chatId, userIndex, attachments);
+      storeSentAttachments(chatId, userIndex, pending.map(item => ({...item})));
       pending = [];
       renderPending();
       setTimeout(renderSentAttachments, 30);
     }, true);
 
-    const observer = new MutationObserver(() => renderSentAttachments());
     const conversation = document.getElementById('conversation');
-    if (conversation) observer.observe(conversation, { childList:true, subtree:true });
+    if (conversation) new MutationObserver(renderSentAttachments).observe(conversation, {childList:true,subtree:true});
     renderPending();
     renderSentAttachments();
   }
 
-  window.fetch = async function RogerVIBAttachmentFetch(input, init = {}) {
-    const url = typeof input === 'string' ? input : input?.url || '';
-    if (!url.includes('localhost:11434/api/chat') || typeof init?.body !== 'string') {
-      return nativeFetch(input, init);
-    }
-
-    try {
-      const payload = JSON.parse(init.body);
-      if (!Array.isArray(payload.messages)) return nativeFetch(input, init);
-
-      const users = payload.messages.filter(message => message?.role === 'user');
-      const store = readSession();
-      const records = Array.isArray(store[activeChatId()]) ? store[activeChatId()] : [];
-      for (const record of records) {
-        const target = users[record.userIndex];
-        if (!target || !Array.isArray(record.attachments) || !record.attachments.length) continue;
-        target.images = record.attachments.map(item => dataUrlToBase64(item.dataUrl)).filter(Boolean);
-      }
-
-      return nativeFetch(input, { ...init, body: JSON.stringify(payload) });
-    } catch {
-      return nativeFetch(input, init);
-    }
+  window.RogerVIBAttachments = {
+    applyToPayload,
+    renderSentAttachments,
+    getPendingCount: () => pending.length
   };
 
   window.addEventListener('DOMContentLoaded', setupDom);
