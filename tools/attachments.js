@@ -1,6 +1,6 @@
 // RogerVIB image attachment layer for Ollama vision-capable models.
 // Images are resized in-browser, previewed, stored for the current session,
-// and explicitly attached to the matching Ollama user message.
+// and attached directly to the final Ollama user message before /api/chat.
 (() => {
   const ACTIVE_CHAT_KEY = 'rogervib_active_chat_v1';
   const CHATS_KEY = 'rogervib_chats_v1';
@@ -10,6 +10,7 @@
   const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
   let pending = [];
+  let inFlight = [];
 
   const activeChatId = () => localStorage.getItem(ACTIVE_CHAT_KEY) || 'default';
   const readSession = () => {
@@ -111,6 +112,7 @@
   }
 
   function storeSentAttachments(chatId, userIndex, attachments) {
+    if (!attachments?.length) return;
     const store = readSession();
     if (!Array.isArray(store[chatId])) store[chatId] = [];
     store[chatId] = store[chatId].filter(item => item?.userIndex !== userIndex);
@@ -120,7 +122,7 @@
         name:item.name,
         type:item.type,
         dataUrl:item.dataUrl,
-        base64:item.base64
+        base64:item.base64 || dataUrlToBase64(item.dataUrl)
       }))
     });
     store[chatId] = store[chatId].slice(-12);
@@ -151,21 +153,60 @@
     }
   }
 
+  function imagesFrom(attachments) {
+    return (attachments || [])
+      .map(item => item.base64 || dataUrlToBase64(item.dataUrl))
+      .filter(Boolean);
+  }
+
   function applyToPayload(payload) {
     if (!payload || !Array.isArray(payload.messages)) return payload;
     const users = payload.messages.filter(message => message?.role === 'user');
     const store = readSession();
     const records = Array.isArray(store[activeChatId()]) ? store[activeChatId()] : [];
 
+    // Restore images for previous turns in this session.
     for (const record of records) {
       const target = users[record.userIndex];
       if (!target || !Array.isArray(record.attachments) || !record.attachments.length) continue;
-      const images = record.attachments
-        .map(item => item.base64 || dataUrlToBase64(item.dataUrl))
-        .filter(Boolean);
+      const images = imagesFrom(record.attachments);
       if (images.length) target.images = images;
     }
+
+    // Most important bit: bind the currently attached image DIRECTLY to the
+    // last user message in the actual Ollama payload. This does not depend on
+    // whether Enter, requestSubmit(), or a button click initiated the send.
+    const immediate = inFlight.length ? inFlight : pending;
+    const lastUser = users.at(-1);
+    if (lastUser && immediate.length) {
+      const images = imagesFrom(immediate);
+      if (images.length) {
+        lastUser.images = images;
+        const userIndex = Math.max(0, users.length - 1);
+        storeSentAttachments(activeChatId(), userIndex, immediate);
+      }
+      inFlight = [];
+      pending = [];
+      setTimeout(() => {
+        renderPending();
+        renderSentAttachments();
+      }, 0);
+    }
+
     return payload;
+  }
+
+  async function addFiles(files) {
+    const accepted = [...(files || [])]
+      .filter(file => file?.type?.startsWith('image/'))
+      .slice(0, Math.max(0, MAX_IMAGES - pending.length));
+    for (const file of accepted) {
+      try { pending.push(await resizeImage(file)); }
+      catch (error) { window.alert(error.message || String(error)); }
+    }
+    renderPending();
+    document.getElementById('messageInput')?.focus();
+    return pending.length;
   }
 
   function setupDom() {
@@ -187,23 +228,20 @@
     plus.addEventListener('click', () => picker.click());
 
     picker.addEventListener('change', async () => {
-      const files = [...picker.files].slice(0, Math.max(0, MAX_IMAGES - pending.length));
+      const files = [...picker.files];
       picker.value = '';
-      for (const file of files) {
-        try { pending.push(await resizeImage(file)); }
-        catch (error) { window.alert(error.message || String(error)); }
-      }
-      renderPending();
-      input.focus();
+      await addFiles(files);
     });
 
-    // Capture before RogerVIB's own submit handler adds the user message.
+    // Capture before RogerVIB's normal submit handler. Keep a copy as inFlight
+    // so the final fetch wrapper can attach it directly to the final user turn.
     form.addEventListener('submit', () => {
       if (!pending.length) return;
-      if (!input.value.trim()) input.value = 'What is in this image?';
+      if (!input.value.trim()) input.value = 'what is in this image?';
       const chatId = activeChatId();
       const userIndex = currentUserCount();
-      storeSentAttachments(chatId, userIndex, pending.map(item => ({...item})));
+      inFlight = pending.map(item => ({...item}));
+      storeSentAttachments(chatId, userIndex, inFlight);
       pending = [];
       renderPending();
       setTimeout(renderSentAttachments, 30);
@@ -218,7 +256,9 @@
   window.RogerVIBAttachments = {
     applyToPayload,
     renderSentAttachments,
-    getPendingCount: () => pending.length
+    addFiles,
+    getPendingCount: () => pending.length,
+    hasPending: () => pending.length > 0 || inFlight.length > 0
   };
 
   window.addEventListener('DOMContentLoaded', setupDom);
