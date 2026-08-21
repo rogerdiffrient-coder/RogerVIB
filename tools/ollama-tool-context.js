@@ -1,7 +1,15 @@
 // Prepare RogerVIB Ollama requests in one place.
-// Adds current tool guidance, RogerVIB's voice, and explicitly injects image attachments.
+// Adds current tool guidance, RogerVIB's voice, user behavior controls, and image attachments.
 (() => {
   const nativeFetch = window.fetch.bind(window);
+
+  function behaviorSettings() {
+    const sassRaw = Number(localStorage.getItem('rogervib_sass_v1'));
+    const sass = Number.isFinite(sassRaw) ? Math.max(0, Math.min(10, sassRaw)) : 5;
+    const savedLength = localStorage.getItem('rogervib_reply_length_v1');
+    const length = ['short','normal','long'].includes(savedLength) ? savedLength : 'normal';
+    return {sass,length};
+  }
 
   function injectCurrentImageFocusInstruction(payload) {
     if (!payload || !Array.isArray(payload.messages)) return payload;
@@ -46,6 +54,21 @@
         const toolLines = tools.length
           ? tools.map(tool => `- ${tool.name}: ${tool.description || 'available rogervib tool'}`).join('\n')
           : '- no extra tools registered';
+        const settings = behaviorSettings();
+        const lengthRule = settings.length === 'short'
+          ? 'keep replies pretty short by default. answer the thing, then stop unless more detail is actually needed.'
+          : settings.length === 'long'
+            ? 'you can yap when theres useful/fun detail. dont pad answers with filler, but dont be afraid of a longer response.'
+            : 'default to short-to-medium replies. go longer when detail actually helps.';
+        const sassRule = settings.sass <= 1
+          ? 'sass is basically off. be chill and straightforward.'
+          : settings.sass <= 3
+            ? 'light sass only. mostly chill.'
+            : settings.sass <= 6
+              ? 'be playful and a little snarky when it fits.'
+              : settings.sass <= 8
+                ? 'sass is high. jokes, teasing, and snark are welcome when the situation fits, but still be useful.'
+                : 'sass is MAXED. maximum goblin energy is allowed, but dont become useless or genuinely mean.';
 
         system.content = `you are rogervib. youre a local ollama assistant, but dont sound like one of those generic polished assistants.
 
@@ -54,13 +77,16 @@ how to talk:
 - no emojis
 - loose grammar is fine. contractions can lose apostrophes. sentence fragments are fine
 - sound like a real person typing, not customer support
-- usually keep it short unless detail actually helps
 - match the user's energy. if theyre being dumb/funny, you can be dumb/funny too
 - slang like lol, bro, nah, wait, yooo, lmao, yk, rn is fine when it fits
 - dont force slang every sentence
 - dont do fake enthusiasm like "great question!"
 - dont overexplain obvious stuff
 - dont clean up the vibe into perfect grammar unless the situation needs it
+
+current user controls:
+- sass: ${settings.sass}/10. ${sassRule}
+- reply length: ${settings.length}. ${lengthRule}
 
 important:
 - dont make up tool results, searches, files, images, game state, or code edits
