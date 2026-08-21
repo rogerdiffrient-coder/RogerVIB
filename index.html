@@ -7,9 +7,9 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB Micro</title>
-  <link rel="stylesheet" href="styles.css?v=2.1.1" />
-  <link rel="stylesheet" href="markdown.css?v=2.1.1" />
-  <link rel="stylesheet" href="micro/micro.css?v=2.1.1" />
+  <link rel="stylesheet" href="styles.css?v=2.2.0" />
+  <link rel="stylesheet" href="markdown.css?v=2.2.0" />
+  <link rel="stylesheet" href="micro/micro.css?v=2.2.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -34,7 +34,7 @@
         <div class="empty-state" id="emptyState">
           <div class="logo-orb">R</div>
           <h1>RogerVIB Micro</h1>
-          <p id="modelDescription">Loading pretrained brain…</p>
+          <p id="modelDescription">Loading Micro v0.4 neural weights…</p>
         </div>
       </section>
 
@@ -44,7 +44,7 @@
           <div class="composer-bottom">
             <div class="micro-model-controls">
               <select id="microModelPicker" class="micro-model-picker" aria-label="Choose RogerVIB model">
-                <option value="pretrained-v0.3">Micro v0.3 — Pretrained</option>
+                <option value="neural-v0.4">Micro v0.4 — Neural</option>
                 <option value="baseline-v0.2">Micro v0.2 — Baseline</option>
               </select>
             </div>
@@ -53,16 +53,17 @@
             </div>
           </div>
         </form>
-        <div class="disclaimer">RogerVIB Micro runs locally in your browser. Models are pretrained by the developer; normal users only run inference. No Ollama.</div>
+        <div class="disclaimer">RogerVIB Micro runs locally in your browser. v0.4 is a real pretrained neural model; training happens in the developer build pipeline. No Ollama.</div>
       </div>
     </main>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-  <script src="tools/markdown-renderer.js?v=2.1.1"></script>
-  <script src="micro/model.js?v=2.1.1"></script>
-  <script src="micro/pretrained-v03.js?v=2.1.1"></script>
-  <script src="micro/app-v3.js?v=2.1.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+  <script src="tools/markdown-renderer.js?v=2.2.0"></script>
+  <script src="micro/model.js?v=2.2.0"></script>
+  <script src="micro/neural-v04.js?v=2.2.0"></script>
+  <script src="micro/app-v4.js?v=2.2.0"></script>
 </body>
 </html>
