@@ -1,0 +1,82 @@
+/* Custom RogerVIB model/settings popover. The native select remains hidden as a compatibility layer. */
+.model-picker.rv-native-model-picker {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+.rv-model-shell { position: relative; flex: 0 0 auto; }
+.rv-model-button {
+  height: 36px; max-width: 210px; border: 0; border-radius: 12px; background: transparent;
+  display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer;
+  color: #d8d8d8; font-weight: 650; font-size: 14px;
+}
+.rv-model-button:hover, .rv-model-button[aria-expanded="true"] { background: #393939; }
+.rv-model-button-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-model-caret { color: #999; font-size: 11px; }
+
+.rv-model-menu {
+  position: absolute; right: 0; bottom: calc(100% + 10px); width: min(330px, calc(100vw - 28px));
+  max-height: min(560px, calc(100vh - 120px)); overflow: auto; z-index: 120;
+  border: 1px solid #4a4a4d; border-radius: 20px; background: #242426;
+  box-shadow: 0 20px 70px rgba(0,0,0,.52); padding: 8px;
+}
+.rv-model-menu[hidden] { display: none !important; }
+.rv-menu-title { padding: 8px 10px 6px; color: #9b9ba0; font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.rv-model-list { display: grid; gap: 3px; }
+.rv-model-option {
+  width: 100%; min-width: 0; border: 0; border-radius: 12px; background: transparent; color: #ececef;
+  display: grid; grid-template-columns: 20px minmax(0,1fr) auto; align-items: center; gap: 8px;
+  padding: 10px 10px; cursor: pointer; text-align: left;
+}
+.rv-model-option:hover { background: #343438; }
+.rv-model-option.active { background: #225fbd; }
+.rv-model-check { width: 20px; text-align: center; opacity: 0; font-weight: 900; }
+.rv-model-option.active .rv-model-check { opacity: 1; }
+.rv-model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.rv-model-badge {
+  border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.18); color: #bdbdc4;
+  border-radius: 999px; padding: 3px 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .07em;
+}
+.rv-model-option.active .rv-model-badge { color: #e8efff; }
+
+.rv-control-section { border-top: 1px solid #3b3b3e; margin-top: 8px; padding: 12px 10px 8px; }
+.rv-control-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.rv-control-label { font-size: 13px; font-weight: 700; }
+.rv-control-value { color: #a9a9b0; font-size: 12px; }
+.rv-range { width: 100%; accent-color: #efefef; cursor: pointer; }
+.rv-range-labels { display: flex; justify-content: space-between; color: #77777d; font-size: 10px; margin-top: 3px; }
+
+.rv-length-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.rv-length-option {
+  border: 1px solid #414146; border-radius: 9px; background: #2b2b2e; color: #aaaab1;
+  padding: 7px 6px; cursor: pointer; font-size: 11px; font-weight: 700;
+}
+.rv-length-option:hover { background: #353539; }
+.rv-length-option.active { background: #ededed; color: #171717; border-color: #ededed; }
+
+.rv-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; }
+.rv-toggle {
+  width: 38px; height: 22px; border: 0; border-radius: 999px; background: #55555b; padding: 2px; cursor: pointer;
+}
+.rv-toggle::after { content: ''; display: block; width: 18px; height: 18px; border-radius: 50%; background: #ececec; transition: transform .15s ease; }
+.rv-toggle.on { background: #2873df; }
+.rv-toggle.on::after { transform: translateX(16px); }
+body.rv-hide-thinking .thinking-block { display: none !important; }
+
+.rv-menu-footer { border-top: 1px solid #3b3b3e; margin-top: 8px; padding: 9px 10px 5px; display: grid; gap: 7px; }
+.rv-refresh-models {
+  border: 1px solid #414146; border-radius: 9px; background: #2b2b2e; color: #c7c7cc;
+  padding: 7px 9px; cursor: pointer; font-size: 11px; font-weight: 700;
+}
+.rv-refresh-models:hover { background: #353539; }
+.rv-shortcuts { color: #77777d; font-size: 10px; line-height: 1.45; }
+.rv-shortcuts code { color: #bdbdc4; }
+
+@media (max-width: 520px) {
+  .rv-model-button { max-width: 150px; }
+  .rv-model-menu { right: -44px; }
+}
