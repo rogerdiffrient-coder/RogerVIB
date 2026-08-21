@@ -3,6 +3,7 @@
   const SASS_KEY = 'rogervib_sass_v1';
   const LENGTH_KEY = 'rogervib_reply_length_v1';
   const THINKING_KEY = 'rogervib_show_thinking_v1';
+  const THINK_DEPTH_KEY = 'rogervib_thinking_depth_v1';
   const OLLAMA_BASE_URL = 'http://localhost:11434';
 
   const readNumber = (key, fallback) => {
@@ -12,6 +13,7 @@
   const sassLevel = () => Math.max(0, Math.min(10, readNumber(SASS_KEY, 5)));
   const replyLength = () => ['short','normal','long'].includes(localStorage.getItem(LENGTH_KEY)) ? localStorage.getItem(LENGTH_KEY) : 'normal';
   const showThinking = () => localStorage.getItem(THINKING_KEY) !== '0';
+  const thinkingDepth = () => ['quick','normal','deep'].includes(localStorage.getItem(THINK_DEPTH_KEY)) ? localStorage.getItem(THINK_DEPTH_KEY) : 'normal';
 
   function sassName(value) {
     if (value <= 1) return 'basically none';
@@ -59,6 +61,12 @@
           <button type="button" class="rv-length-option" data-length="short">short</button>
           <button type="button" class="rv-length-option" data-length="normal">normal</button>
           <button type="button" class="rv-length-option" data-length="long">yap</button>
+        </div>
+        <div class="rv-control-row" style="margin-top:12px"><span class="rv-control-label">Thinking depth</span><span class="rv-control-value">reasoning effort</span></div>
+        <div class="rv-length-group rv-thinking-depth-group">
+          <button type="button" class="rv-length-option rv-think-option" data-depth="quick">quick</button>
+          <button type="button" class="rv-length-option rv-think-option" data-depth="normal">normal</button>
+          <button type="button" class="rv-length-option rv-think-option" data-depth="deep">deep</button>
         </div>
         <div class="rv-toggle-row"><span class="rv-control-label">Show thinking</span><button type="button" class="rv-toggle" aria-label="Toggle thinking visibility"></button></div>
       </div>
@@ -118,7 +126,9 @@
       sassSlider.value = String(sass);
       sassValue.textContent = `${sass}/10 · ${sassName(sass)}`;
       const length = replyLength();
-      menu.querySelectorAll('.rv-length-option').forEach(el => el.classList.toggle('active', el.dataset.length === length));
+      menu.querySelectorAll('.rv-length-option[data-length]').forEach(el => el.classList.toggle('active', el.dataset.length === length));
+      const depth = thinkingDepth();
+      menu.querySelectorAll('.rv-think-option').forEach(el => el.classList.toggle('active', el.dataset.depth === depth));
       thinkingToggle.classList.toggle('on', showThinking());
       thinkingToggle.setAttribute('aria-pressed', showThinking() ? 'true' : 'false');
       syncThinkingVisibility();
@@ -135,8 +145,12 @@
       localStorage.setItem(SASS_KEY, String(sassSlider.value));
       renderControls();
     });
-    menu.querySelectorAll('.rv-length-option').forEach(el => el.addEventListener('click', () => {
+    menu.querySelectorAll('.rv-length-option[data-length]').forEach(el => el.addEventListener('click', () => {
       localStorage.setItem(LENGTH_KEY, el.dataset.length);
+      renderControls();
+    }));
+    menu.querySelectorAll('.rv-think-option').forEach(el => el.addEventListener('click', () => {
+      localStorage.setItem(THINK_DEPTH_KEY, el.dataset.depth);
       renderControls();
     }));
     thinkingToggle.addEventListener('click', () => {
@@ -176,6 +190,6 @@
     new MutationObserver(() => renderModels()).observe(select,{childList:true,subtree:true,attributes:true});
 
     renderModels(); renderControls();
-    window.RogerVIBBehaviorSettings = { sassLevel, replyLength, showThinking };
+    window.RogerVIBBehaviorSettings = { sassLevel, replyLength, showThinking, thinkingDepth };
   });
 })();
