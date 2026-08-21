@@ -1,0 +1,11 @@
+{
+  "name": "RogerVIB Micro v0.4 Neural",
+  "version": "0.4",
+  "architecture": "hashed 4-char embedding + GRU character language model",
+  "parameter_count": 10049184,
+  "hash_buckets": 104000,
+  "hidden_size": 96,
+  "context_chars": 4,
+  "vocab": "\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+  "max_reply_chars": 220
+}
