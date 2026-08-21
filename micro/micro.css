@@ -1,46 +1,13 @@
-:root{
-  --micro-composer-space:110px;
-}
-
-/* The composer floats over the scroll area, so reserve its real measured height. */
-.conversation{
-  padding-bottom:calc(var(--micro-composer-space) + 42px) !important;
-  scroll-padding-bottom:calc(var(--micro-composer-space) + 42px);
-}
-
-.composer-wrap{
-  z-index:8;
-}
-
-.message-row:last-child{
-  margin-bottom:8px;
-}
-
-.message-stack{
-  min-width:0;
-}
-
-.message-row.bot .message-stack{
-  max-width:calc(100% - 44px);
-}
-
-.micro-model-badge{
-  display:inline-flex;
-  align-items:center;
-  min-height:32px;
-  padding:0 11px;
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:10px;
-  background:rgba(255,255,255,.045);
-  color:rgba(255,255,255,.72);
-  font-size:12px;
-  font-weight:700;
-  letter-spacing:.02em;
-  user-select:none;
-}
-
-@media (max-width:760px){
-  .conversation{
-    padding-bottom:calc(var(--micro-composer-space) + 30px) !important;
-  }
-}
+:root{--micro-composer-space:112px;}
+.conversation{padding-bottom:calc(var(--micro-composer-space) + 34px)!important;}
+.composer-wrap{z-index:5;}
+.micro-model-controls{display:flex;align-items:center;gap:7px;min-width:0;}
+.micro-model-picker{appearance:none;-webkit-appearance:none;border:1px solid rgba(255,255,255,.12);outline:0;border-radius:10px;background:rgba(255,255,255,.045);color:rgba(255,255,255,.78);font-size:12px;font-weight:700;letter-spacing:.01em;min-height:34px;max-width:210px;padding:0 30px 0 11px;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,#aaa 50%),linear-gradient(135deg,#aaa 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat;}
+.micro-model-picker:hover{background-color:rgba(255,255,255,.08);}
+.micro-model-picker:disabled{opacity:.55;cursor:default;}
+.micro-model-picker option{background:#242424;color:#ececec;}
+.micro-train-button{min-height:34px;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:0 11px;background:#343434;color:#ececec;font-size:12px;font-weight:750;cursor:pointer;}
+.micro-train-button:hover{background:#404040;}
+.micro-train-button:disabled{opacity:.55;cursor:default;}
+.micro-train-button[hidden]{display:none!important;}
+@media(max-width:760px){.micro-model-picker{max-width:170px}.micro-model-controls{gap:5px}.micro-train-button{padding:0 9px}}
