@@ -1,3 +1,29 @@
+:root{
+  --micro-composer-space:110px;
+}
+
+/* The composer floats over the scroll area, so reserve its real measured height. */
+.conversation{
+  padding-bottom:calc(var(--micro-composer-space) + 42px) !important;
+  scroll-padding-bottom:calc(var(--micro-composer-space) + 42px);
+}
+
+.composer-wrap{
+  z-index:8;
+}
+
+.message-row:last-child{
+  margin-bottom:8px;
+}
+
+.message-stack{
+  min-width:0;
+}
+
+.message-row.bot .message-stack{
+  max-width:calc(100% - 44px);
+}
+
 .micro-model-badge{
   display:inline-flex;
   align-items:center;
@@ -11,4 +37,10 @@
   font-weight:700;
   letter-spacing:.02em;
   user-select:none;
+}
+
+@media (max-width:760px){
+  .conversation{
+    padding-bottom:calc(var(--micro-composer-space) + 30px) !important;
+  }
 }
