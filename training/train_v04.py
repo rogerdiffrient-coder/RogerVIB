@@ -8,7 +8,6 @@ for browser inference while still giving the model ~10M learned parameters.
 from __future__ import annotations
 
 import json
-import math
 import os
 import random
 from pathlib import Path
@@ -31,11 +30,13 @@ VOCAB = ["\n"] + [chr(i) for i in range(32, 127)]
 TO_ID = {c: i for i, c in enumerate(VOCAB)}
 UNK_ID = TO_ID["?"]
 
+# 104,000 * 96 = 9,984,000 parameters in the learned context table.
+# The small GRU + output head bring the complete model to 10,049,184 parameters.
 HASH_BUCKETS = 104_000
 HIDDEN = 96
 SEQ = 96
 BATCH = 32
-EPOCHS = int(os.environ.get("ROGERVIB_EPOCHS", "8"))
+EPOCHS = int(os.environ.get("ROGERVIB_EPOCHS", "4"))
 LR = float(os.environ.get("ROGERVIB_LR", "0.0025"))
 
 
@@ -98,8 +99,9 @@ def build_corpus(pairs: list[tuple[str, str]]) -> str:
         ("what", "what part?"),
         ("keep going", "sure. what part do you want more detail on?"),
         ("that makes no sense", "yeah, then i probably messed that answer up. tell me which part and ill try again."),
+        ("you misunderstood me", "my bad. say it another way or point out what i got wrong and ill try again."),
     ]
-    for _ in range(900):
+    for _ in range(400):
         a = random.choice(pairs)
         b = random.choice(pairs)
         f = random.choice(followups)
@@ -115,18 +117,13 @@ def build_corpus(pairs: list[tuple[str, str]]) -> str:
     verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "builds", "reads", "creates"]
     objects = ["context", "data", "a value", "the next step", "a result", "a small state", "an answer", "a pattern", "a sequence", "the current input"]
     endings = ["carefully", "during inference", "when needed", "one step at a time", "before returning", "while the program runs", "from the recent context", "without changing the weights"]
-    for _ in range(7000):
-        s = f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}."
-        blocks.append(s + "\n")
+    for _ in range(2500):
+        blocks.append(
+            f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}.\n"
+        )
 
     random.shuffle(blocks)
-    # Multiple differently shuffled passes produce enough training characters without
-    # simply repeating the exact same adjacent conversation order.
-    passes = []
-    for _ in range(3):
-        random.shuffle(blocks)
-        passes.append("".join(blocks))
-    text = "".join(passes)
+    text = "".join(blocks)
     print(f"training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
     return text
 
@@ -167,7 +164,9 @@ def train() -> RogerVIBV04:
     xs, ys = make_sequences(corpus)
     model = RogerVIBV04()
     params = parameter_count(model)
+    assert params == 10_049_184, params
     print(f"parameters: {params:,}")
+    print(f"training sequences: {xs.shape[0]:,} x {SEQ} chars")
 
     # SparseAdam updates only embedding rows touched by this batch; AdamW handles the
     # small dense recurrent/output core.
