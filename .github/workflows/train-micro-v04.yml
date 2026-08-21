@@ -1,0 +1,57 @@
+name: Train RogerVIB Micro v0.4
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'training/v04_corpus.jsonl'
+      - 'training/train_v04.py'
+      - '.github/workflows/train-micro-v04.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train-rogervib-micro-v04
+  cancel-in-progress: true
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install trainer dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx
+
+      - name: Train and export pretrained v0.4
+        env:
+          ROGERVIB_EPOCHS: '8'
+          ROGERVIB_LR: '0.0025'
+        run: python training/train_v04.py
+
+      - name: Commit pretrained model artifact
+        run: |
+          git config user.name 'RogerVIB Trainer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add models/micro-v0.4/model.onnx models/micro-v0.4/config.json
+          if git diff --cached --quiet; then
+            echo 'Model artifact unchanged.'
+            exit 0
+          fi
+          git commit -m 'Train RogerVIB Micro v0.4 neural model [skip ci]'
+          git push
