@@ -7,19 +7,19 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB</title>
-  <link rel="stylesheet" href="styles.css?v=1.14.6" />
-  <link rel="stylesheet" href="thinking.css?v=1.14.6" />
-  <link rel="stylesheet" href="markdown.css?v=1.14.6" />
-  <link rel="stylesheet" href="widgets-v2.css?v=1.14.6" />
-  <link rel="stylesheet" href="attachments.css?v=1.14.6" />
-  <link rel="stylesheet" href="coding-workspace.css?v=1.14.6" />
-  <link rel="stylesheet" href="wordle-local-row-bridge.css?v=1.14.6" />
-  <link rel="stylesheet" href="tools/model-controls.css?v=1.14.6" />
-  <link rel="stylesheet" href="tools/lab-controls.css?v=1.14.6" />
-  <link rel="stylesheet" href="tools/ai-discord.css?v=1.14.6" />
-  <link rel="stylesheet" href="tools/ai-social.css?v=1.14.6" />
-  <link rel="stylesheet" href="tools/sidebar-social-nav.css?v=1.14.8" />
-  <link rel="stylesheet" href="tools/chat-setup.css?v=1.14.6" />
+  <link rel="stylesheet" href="styles.css?v=1.15.0" />
+  <link rel="stylesheet" href="thinking.css?v=1.15.0" />
+  <link rel="stylesheet" href="markdown.css?v=1.15.0" />
+  <link rel="stylesheet" href="widgets-v2.css?v=1.15.0" />
+  <link rel="stylesheet" href="attachments.css?v=1.15.0" />
+  <link rel="stylesheet" href="coding-workspace.css?v=1.15.0" />
+  <link rel="stylesheet" href="wordle-local-row-bridge.css?v=1.15.0" />
+  <link rel="stylesheet" href="tools/model-controls.css?v=1.15.0" />
+  <link rel="stylesheet" href="tools/lab-controls.css?v=1.15.0" />
+  <link rel="stylesheet" href="tools/ai-discord.css?v=1.15.0" />
+  <link rel="stylesheet" href="tools/ai-social.css?v=1.15.0" />
+  <link rel="stylesheet" href="tools/sidebar-social-nav.css?v=1.15.0" />
+  <link rel="stylesheet" href="tools/chat-setup.css?v=1.15.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -31,15 +31,15 @@
     <main class="main-panel">
       <header class="topbar"><button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button><div class="topbar-spacer"></div><button class="copy-chat-button" id="copyChatButton" type="button" aria-label="Copy current chat">Copy Chat</button></header>
       <section class="conversation" id="conversation"><div class="empty-state" id="emptyState"><div class="logo-orb">R</div><h1>What can I help with?</h1><p id="modelDescription">Connecting to Ollama…</p></div></section>
-      <div class="composer-wrap"><form class="composer" id="chatForm"><textarea id="messageInput" rows="1" placeholder="Message RogerVIB" aria-label="Message RogerVIB"></textarea><div class="composer-bottom"><button class="plus-button" type="button" aria-label="Attach image" title="Attach image">+</button><div class="composer-actions"><select id="modelPicker" class="model-picker" aria-label="Choose Ollama model"><option>Connecting to Ollama…</option></select><button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button></div></div></form><div class="disclaimer">RogerVIB uses Ollama models with tools, live thinking, Markdown, image attachments, widgets, games, Coding, AI Lab controls, AI users, DMs, and group chats.</div></div>
+      <div class="composer-wrap"><form class="composer" id="chatForm"><textarea id="messageInput" rows="1" placeholder="Message RogerVIB" aria-label="Message RogerVIB"></textarea><div class="composer-bottom"><button class="plus-button" type="button" aria-label="Attach image" title="Attach image">+</button><div class="composer-actions"><select id="modelPicker" class="model-picker" aria-label="Choose Ollama model"><option>Connecting to Ollama…</option></select><button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button></div></div></form><div class="disclaimer">RogerVIB uses Ollama models with tools, live thinking, Markdown, image attachments, widgets, games, Coding, per-user AI controls, AI users, DMs, and group chats.</div></div>
     </main>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-  <script src="tools/markdown-renderer.js?v=1.14.6"></script>
-  <script src="tools/tools.js?v=1.14.6"></script><script src="tools/calculator.js?v=1.14.6"></script><script src="tools/web-search.js?v=1.14.6"></script><script src="tools/widgets-v2.js?v=1.14.6"></script><script src="tools/attachments.js?v=1.14.6"></script><script src="tools/attachment-inputs.js?v=1.14.6"></script><script src="tools/quick-commands.js?v=1.14.6"></script><script src="tools/input-router.js?v=1.14.6"></script><script src="tools/wordle-local-row-bridge.js?v=1.14.6"></script><script src="tools/coding-workspace.js?v=1.14.6"></script><script src="tools/coding-project-card.js?v=1.14.6"></script><script src="tools/tool-placement.js?v=1.14.6"></script><script src="tools/widget-dedupe.js?v=1.14.6"></script><script src="tools/wordle-follow-anchor.js?v=1.14.6"></script><script src="tools/coding-enhancements.js?v=1.14.6"></script><script src="tools/coding-fullscreen-force.js?v=1.14.6"></script><script src="tools/lab-prompt-layer.js?v=1.14.6"></script><script src="tools/ollama-tool-context.js?v=1.14.6"></script><script src="tools/busy-ui.js?v=1.14.6"></script><script src="tools/output-cleanup.js?v=1.14.6"></script>
-  <script src="tools/model-connection-timeout.js?v=1.14.7"></script>
-  <script src="main.js?v=1.14.6"></script>
-  <script src="tools/model-controls.js?v=1.14.6"></script><script src="tools/model-persistence.js?v=1.14.6"></script><script src="tools/lab-controls.js?v=1.14.6"></script><script src="tools/battle-fetch-fix.js?v=1.14.6"></script><script src="tools/battle-streaming-fix.js?v=1.14.6"></script><script src="tools/ai-discord.js?v=1.14.6"></script><script src="tools/ai-social.js?v=1.14.6"></script><script src="tools/sidebar-social-nav.js?v=1.14.8"></script><script src="tools/chat-setup-v2.js?v=1.14.8"></script><script src="tools/lab-social-cleanup.js?v=1.14.6"></script><script src="tools/social-nav-cleanup.js?v=1.14.6"></script><script src="tools/markdown-unifier.js?v=1.14.6"></script><script src="tools/ollama-connection-status.js?v=1.14.6"></script>
+  <script src="tools/markdown-renderer.js?v=1.15.0"></script>
+  <script src="tools/tools.js?v=1.15.0"></script><script src="tools/calculator.js?v=1.15.0"></script><script src="tools/web-search.js?v=1.15.0"></script><script src="tools/widgets-v2.js?v=1.15.0"></script><script src="tools/attachments.js?v=1.15.0"></script><script src="tools/attachment-inputs.js?v=1.15.0"></script><script src="tools/quick-commands.js?v=1.15.0"></script><script src="tools/input-router.js?v=1.15.0"></script><script src="tools/wordle-local-row-bridge.js?v=1.15.0"></script><script src="tools/coding-workspace.js?v=1.15.0"></script><script src="tools/coding-project-card.js?v=1.15.0"></script><script src="tools/tool-placement.js?v=1.15.0"></script><script src="tools/widget-dedupe.js?v=1.15.0"></script><script src="tools/wordle-follow-anchor.js?v=1.15.0"></script><script src="tools/coding-enhancements.js?v=1.15.0"></script><script src="tools/coding-fullscreen-force.js?v=1.15.0"></script><script src="tools/ollama-tool-context.js?v=1.15.0"></script><script src="tools/busy-ui.js?v=1.15.0"></script><script src="tools/output-cleanup.js?v=1.15.0"></script>
+  <script src="tools/model-connection-timeout.js?v=1.15.0"></script>
+  <script src="main.js?v=1.15.0"></script>
+  <script src="tools/model-controls.js?v=1.15.0"></script><script src="tools/model-persistence.js?v=1.15.0"></script><script src="tools/lab-controls.js?v=1.15.0"></script><script src="tools/battle-fetch-fix.js?v=1.15.0"></script><script src="tools/battle-streaming-fix.js?v=1.15.0"></script><script src="tools/ai-discord.js?v=1.15.0"></script><script src="tools/ai-social.js?v=1.15.0"></script><script src="tools/sidebar-social-nav.js?v=1.15.0"></script><script src="tools/chat-setup-v2.js?v=1.15.0"></script><script src="tools/lab-social-cleanup.js?v=1.15.0"></script><script src="tools/social-nav-cleanup.js?v=1.15.0"></script><script src="tools/per-user-lab.js?v=1.15.0"></script><script src="tools/markdown-unifier.js?v=1.15.0"></script>
 </body>
 </html>
