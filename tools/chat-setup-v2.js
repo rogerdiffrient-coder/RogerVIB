@@ -4,6 +4,7 @@
   const ACTIVE_KEY='rogervib_active_chat_v1';
   const USERS_KEY='rogervib_ai_users_v1';
   const META_KEY='rogervib_chat_meta_v1';
+  const ROGERVIB_ID='__rogervib__';
 
   const read=(key,fallback)=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v??fallback;}catch{return fallback;}};
   const write=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
@@ -15,7 +16,18 @@
   let renderQueued=false;
 
   const chats=()=>read(CHATS_KEY,[]);
-  const users=()=>read(USERS_KEY,[]);
+  function users(){
+    const list=read(USERS_KEY,[]);
+    if(!list.some(u=>u?.id===ROGERVIB_ID)){
+      const picker=document.getElementById('modelPicker');
+      const preferred=localStorage.getItem('rogervib_preferred_model_v1');
+      const model=(preferred&&!/connecting|loading|no ollama/i.test(preferred))?preferred:
+        (picker?.value&&!/connecting|loading|no ollama/i.test(picker.value)?picker.value:'gemma4:cloud');
+      list.unshift({id:ROGERVIB_ID,name:'RogerVIB',model,prompt:'Default RogerVIB assistant. Uses the normal RogerVIB personality, tools, and app behavior.',avatarText:'RV',avatarColor:'#f0f0f0',builtIn:true});
+      write(USERS_KEY,list);
+    }
+    return list;
+  }
   const metas=()=>read(META_KEY,{});
   const activeId=()=>localStorage.getItem(ACTIVE_KEY)||'';
   const activeChat=()=>chats().find(c=>c.id===activeId());
@@ -101,7 +113,8 @@
     setupPage.className='rv-chatsetup-page';
     const old=metas()[chat.id]||{};
     const available=currentMembers();
-    const selected=new Set(old.members?.length?old.members:(available[0]?[available[0].id]:[]));
+    const defaultMember=available.find(m=>m.id===ROGERVIB_ID)||available[0];
+    const selected=new Set(old.members?.length?old.members:(defaultMember?[defaultMember.id]:[]));
 
     setupPage.innerHTML='<div class="rv-chatsetup-card"><div class="rv-chatsetup-eyebrow">NEW CHAT</div><h1>Set up your chat</h1><p>Name it and choose which AI users are in here.</p><label class="rv-chatsetup-name-label">Chat name<input data-name maxlength="60" placeholder="tacos"></label><div class="rv-chatsetup-heading"><span>Members</span><small>choose at least one</small></div><div class="rv-chatsetup-members" data-members></div><div class="rv-chatsetup-actions"><button class="primary" data-create>Create chat</button></div></div>';
 
@@ -110,12 +123,7 @@
     const membersBox=setupPage.querySelector('[data-members]');
     const create=setupPage.querySelector('[data-create]');
 
-    if(!available.length){
-      membersBox.innerHTML='<div class="rv-chatsetup-no-users"><strong>No AI users yet</strong><span>Go to Users and create one first.</span></div>';
-      create.disabled=true;
-    }else{
-      for(const member of available)membersBox.append(memberRow(member,selected.has(member.id)));
-    }
+    for(const member of available)membersBox.append(memberRow(member,selected.has(member.id)));
 
     create.onclick=()=>{
       const title=name.value.trim()||'New chat';
@@ -196,6 +204,7 @@
   }
 
   window.addEventListener('DOMContentLoaded',()=>{
+    users();
     queueRender();
     setTimeout(queueRender,50);
     setTimeout(queueRender,250);
@@ -204,7 +213,6 @@
     document.getElementById('chatList')?.addEventListener('click',()=>setTimeout(queueRender,0));
     window.addEventListener('rogervib-ai-users-changed',queueRender);
 
-    // Only watch direct chat-entry replacements from main.js. Never observe our own subtitles.
     const list=document.getElementById('chatList');
     if(list)new MutationObserver(queueRender).observe(list,{childList:true,subtree:false});
   });
