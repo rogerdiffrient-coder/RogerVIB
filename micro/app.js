@@ -21,6 +21,7 @@
     const mobile=document.getElementById('mobileSidebarButton');
     const sidebar=document.querySelector('.sidebar');
     const modelDescription=document.getElementById('modelDescription');
+    const composerWrap=document.querySelector('.composer-wrap');
 
     let chats=read(CHATS_KEY,[]);
     let active=localStorage.getItem(ACTIVE_KEY)||'';
@@ -30,8 +31,17 @@
     function save(){write(CHATS_KEY,chats);localStorage.setItem(ACTIVE_KEY,active);}
     const activeChat=()=>chats.find(c=>c.id===active);
 
+    function syncComposerSpace(){
+      const h=Math.ceil(composerWrap?.getBoundingClientRect().height||110);
+      document.documentElement.style.setProperty('--micro-composer-space',`${h}px`);
+    }
+
+    function scrollToBottom(){
+      requestAnimationFrame(()=>{conversation.scrollTop=conversation.scrollHeight;});
+    }
+
     function renderMarkdown(el,text){
-      if(window.RogerVIBMarkdown?.renderInto) return window.RogerVIBMarkdown.renderInto(el,String(text||''));
+      if(window.RogerVIBMarkdown?.renderInto)return window.RogerVIBMarkdown.renderInto(el,String(text||''));
       el.textContent=String(text||'');
     }
 
@@ -50,7 +60,7 @@
       emptyState.classList.toggle('hidden',!!chat?.messages.length);
       copy.disabled=!chat?.messages.length;
       for(const m of chat?.messages||[])renderMessage(m);
-      requestAnimationFrame(()=>conversation.scrollTop=conversation.scrollHeight);
+      scrollToBottom();
     }
 
     function renderChats(){
@@ -63,21 +73,24 @@
       }
     }
 
-    function resize(){input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,160)}px`;}
+    function resize(){input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,160)}px`;syncComposerSpace();}
 
     async function sendMessage(){
-      const text=input.value.trim();const chat=activeChat();if(!text||!chat||send.disabled)return;
+      const text=input.value.trim(),chat=activeChat();if(!text||!chat||send.disabled)return;
       chat.messages.push({role:'user',text});
       if(chat.title==='New conversation')chat.title=text.length>28?`${text.slice(0,28)}…`:text;
       input.value='';resize();send.disabled=true;save();renderChats();renderConversation();
-      modelDescription.textContent='RogerVIB Micro v0.1 • thinking locally…';
+      modelDescription.textContent='RogerVIB Micro v0.2 • thinking locally…';
       try{
         const reply=await window.RogerVIBMicro.reply(text,chat.messages);
         chat.messages.push({role:'bot',text:reply});
       }catch(error){
         console.error(error);chat.messages.push({role:'bot',text:`micro brain crashed: ${error.message}`});
       }finally{
-        send.disabled=false;modelDescription.textContent='RogerVIB Micro v0.1 • local prototype • no Ollama';save();renderConversation();input.focus();
+        send.disabled=false;
+        const info=window.RogerVIBMicro?.info;
+        modelDescription.textContent=info?`${info.name} v${info.version} • local prototype • ${window.RogerVIBMicro.exampleCount||0} examples • ${info.parameterBudget.toLocaleString()} parameter target`:'RogerVIB Micro';
+        save();renderConversation();input.focus();
       }
     }
 
@@ -89,9 +102,12 @@
     collapse.onclick=()=>{if(innerWidth<=760)sidebar.classList.remove('mobile-open');else sidebar.classList.toggle('collapsed');};
     mobile.onclick=()=>sidebar.classList.toggle('mobile-open');
 
+    if(window.ResizeObserver&&composerWrap)new ResizeObserver(()=>{syncComposerSpace();scrollToBottom();}).observe(composerWrap);
+    window.addEventListener('resize',()=>{syncComposerSpace();scrollToBottom();});
+
     const info=window.RogerVIBMicro?.info;
-    modelDescription.textContent=info?`${info.name} v${info.version} • local prototype • ${info.parameterBudget.toLocaleString()} parameter target`:'RogerVIB Micro';
-    renderChats();renderConversation();resize();input.focus();
+    modelDescription.textContent=info?`${info.name} v${info.version} • local prototype • ${window.RogerVIBMicro.exampleCount||0} examples • ${info.parameterBudget.toLocaleString()} parameter target`:'RogerVIB Micro';
+    renderChats();renderConversation();resize();syncComposerSpace();input.focus();
   }
 
   window.addEventListener('DOMContentLoaded',boot);
