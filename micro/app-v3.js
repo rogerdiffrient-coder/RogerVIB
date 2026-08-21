@@ -1,12 +1,13 @@
-// RogerVIB Micro app v0.3: baseline + real locally trained neural model.
+// RogerVIB Micro app: baseline + pretrained local model. No runtime training.
 (() => {
   const CHATS_KEY='rogervib_micro_chats_v1';
   const ACTIVE_KEY='rogervib_micro_active_chat_v1';
-  const DEFAULT_MODEL='baseline-v0.2';
+  const DEFAULT_MODEL='pretrained-v0.3';
 
   const read=(key,fallback)=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v??fallback;}catch{return fallback;}};
   const write=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
   const id=()=>crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const normalizeModel=id=>id==='neural-v0.3'?'pretrained-v0.3':(id||DEFAULT_MODEL);
   const makeChat=()=>({id:id(),title:'New conversation',model:DEFAULT_MODEL,messages:[]});
 
   function boot(){
@@ -24,11 +25,9 @@
     const modelDescription=document.getElementById('modelDescription');
     const composerWrap=document.querySelector('.composer-wrap');
     const modelPicker=document.getElementById('microModelPicker');
-    const trainButton=document.getElementById('trainModelButton');
 
-    let chats=read(CHATS_KEY,[]).map(c=>({...c,model:c.model||DEFAULT_MODEL,messages:Array.isArray(c.messages)?c.messages:[]}));
+    let chats=read(CHATS_KEY,[]).map(c=>({...c,model:normalizeModel(c.model),messages:Array.isArray(c.messages)?c.messages:[]}));
     let active=localStorage.getItem(ACTIVE_KEY)||'';
-    let training=false;
     if(!chats.length){const first=makeChat();chats=[first];active=first.id;save();}
     if(!chats.some(c=>c.id===active))active=chats[0].id;
 
@@ -64,24 +63,18 @@
       scrollToBottom();
     }
 
-    function modelLabel(id){return id==='neural-v0.3'?'Micro v0.3 — Neural':'Micro v0.2 — Baseline';}
+    function modelLabel(id){return id==='baseline-v0.2'?'Micro v0.2 — Baseline':'Micro v0.3 — Pretrained';}
 
     function updateModelUI(){
       const chat=activeChat();if(!chat)return;
-      modelPicker.value=chat.model||DEFAULT_MODEL;
-      const neural=window.RogerVIBNeural?.info;
-      const isNeural=modelPicker.value==='neural-v0.3';
-      trainButton.hidden=!isNeural;
-      trainButton.disabled=training;
-      trainButton.textContent=training?'Training…':(neural?.trained?'Retrain':'Train');
-      if(training)return;
-      if(isNeural){
-        modelDescription.textContent=neural?.trained
-          ? `Micro v0.3 Neural • ${Number(neural.parameterCount||0).toLocaleString()} trained parameters • saved locally`
-          : `Micro v0.3 Neural • untrained • ${Number(neural?.parameterCount||3031776).toLocaleString()} parameters`;
-      }else{
+      chat.model=normalizeModel(chat.model);
+      modelPicker.value=chat.model;
+      if(chat.model==='baseline-v0.2'){
         const info=window.RogerVIBMicro?.info;
         modelDescription.textContent=info?`${info.name} v${info.version} • baseline • ${window.RogerVIBMicro.exampleCount||0} examples`:'Micro v0.2';
+      }else{
+        const info=window.RogerVIBPretrained?.info;
+        modelDescription.textContent=info?`${info.name} • pretrained • ${window.RogerVIBPretrained.exampleCount||0} learned examples • local inference`:'Micro v0.3 Pretrained';
       }
       syncComposerSpace();
     }
@@ -89,8 +82,9 @@
     function renderChats(){
       chatList.innerHTML='';
       for(const chat of chats){
+        chat.model=normalizeModel(chat.model);
         const entry=document.createElement('div');entry.className=`chat-entry${chat.id===active?' active':''}`;
-        const button=document.createElement('button');button.className='chat-item';button.textContent=chat.title;button.title=`${chat.title} · ${modelLabel(chat.model||DEFAULT_MODEL)}`;
+        const button=document.createElement('button');button.className='chat-item';button.textContent=chat.title;button.title=`${chat.title} · ${modelLabel(chat.model)}`;
         button.onclick=()=>{active=chat.id;save();renderChats();renderConversation();updateModelUI();};
         const del=document.createElement('button');del.className='delete-chat';del.textContent='×';del.onclick=e=>{e.stopPropagation();chats=chats.filter(c=>c.id!==chat.id);if(!chats.length)chats=[makeChat()];if(!chats.some(c=>c.id===active))active=chats[0].id;save();renderChats();renderConversation();updateModelUI();};
         entry.append(button,del);chatList.append(entry);
@@ -100,16 +94,12 @@
     function resize(){input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,160)}px`;syncComposerSpace();}
 
     async function getReply(text,chat){
-      if(chat.model==='neural-v0.3'){
-        await window.RogerVIBNeural.load();
-        if(!window.RogerVIBNeural.info.trained)throw new Error('Micro v0.3 is not trained yet. Click Train first.');
-        return window.RogerVIBNeural.reply(text,chat.messages);
-      }
-      return window.RogerVIBMicro.reply(text,chat.messages);
+      if(chat.model==='baseline-v0.2')return window.RogerVIBMicro.reply(text,chat.messages);
+      return window.RogerVIBPretrained.reply(text,chat.messages);
     }
 
     async function sendMessage(){
-      const text=input.value.trim(),chat=activeChat();if(!text||!chat||send.disabled||training)return;
+      const text=input.value.trim(),chat=activeChat();if(!text||!chat||send.disabled)return;
       chat.messages.push({role:'user',text});
       if(chat.title==='New conversation')chat.title=text.length>28?`${text.slice(0,28)}…`:text;
       input.value='';resize();send.disabled=true;save();renderChats();renderConversation();
@@ -118,49 +108,24 @@
         const reply=await getReply(text,chat);
         chat.messages.push({role:'bot',text:reply});
       }catch(error){
-        console.error(error);chat.messages.push({role:'bot',text:`${error.message}`});
+        console.error(error);chat.messages.push({role:'bot',text:`micro brain crashed: ${error.message}`});
       }finally{
         send.disabled=false;save();renderConversation();updateModelUI();input.focus();
-      }
-    }
-
-    async function trainNeural(){
-      if(training)return;
-      training=true;trainButton.disabled=true;send.disabled=true;modelPicker.disabled=true;
-      syncComposerSpace();
-      try{
-        await window.RogerVIBNeural.train(chats,progress=>{
-          if(progress.stage==='start'){
-            modelDescription.textContent=`Preparing ${progress.samples} training sequences • ${Number(progress.params).toLocaleString()} parameters…`;
-          }else if(progress.stage==='training'){
-            const loss=Number.isFinite(progress.loss)?progress.loss.toFixed(4):'?';
-            modelDescription.textContent=`Training v0.3 • epoch ${progress.epoch}/${progress.epochs} • loss ${loss}`;
-          }else if(progress.stage==='done'){
-            modelDescription.textContent='Micro v0.3 training complete • weights saved locally';
-          }
-        });
-      }catch(error){
-        console.error('Neural training failed:',error);
-        modelDescription.textContent=`Training failed: ${error.message}`;
-      }finally{
-        training=false;send.disabled=false;modelPicker.disabled=false;updateModelUI();input.focus();
       }
     }
 
     form.addEventListener('submit',e=>{e.preventDefault();sendMessage();});
     input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
     input.addEventListener('input',resize);
-    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;chat.model=modelPicker.value;save();renderChats();updateModelUI();input.focus();});
-    trainButton.addEventListener('click',trainNeural);
-    newChat.onclick=()=>{const chat=makeChat();chat.model=selectedModel();chats.unshift(chat);active=chat.id;save();renderChats();renderConversation();updateModelUI();input.focus();};
+    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;chat.model=normalizeModel(modelPicker.value);save();renderChats();updateModelUI();input.focus();});
+    newChat.onclick=()=>{const inherited=selectedModel();const chat=makeChat();chat.model=inherited;chats.unshift(chat);active=chat.id;save();renderChats();renderConversation();updateModelUI();input.focus();};
     copy.onclick=async()=>{const chat=activeChat();if(!chat?.messages.length)return;const text=chat.messages.map(m=>`${m.role==='user'?'You':'RogerVIB'}: ${m.text}`).join('\n\n');try{await navigator.clipboard.writeText(text);copy.textContent='Copied!';setTimeout(()=>copy.textContent='Copy Chat',1000);}catch{copy.textContent='Copy failed';}};
     collapse.onclick=()=>{if(innerWidth<=760)sidebar.classList.remove('mobile-open');else sidebar.classList.toggle('collapsed');};
     mobile.onclick=()=>sidebar.classList.toggle('mobile-open');
     if(window.ResizeObserver&&composerWrap)new ResizeObserver(()=>{syncComposerSpace();scrollToBottom();}).observe(composerWrap);
     window.addEventListener('resize',()=>{syncComposerSpace();scrollToBottom();});
 
-    (async()=>{try{await window.RogerVIBNeural?.load();}catch{}updateModelUI();})();
-    renderChats();renderConversation();resize();syncComposerSpace();input.focus();
+    save();renderChats();renderConversation();resize();syncComposerSpace();updateModelUI();input.focus();
   }
 
   window.addEventListener('DOMContentLoaded',boot);
