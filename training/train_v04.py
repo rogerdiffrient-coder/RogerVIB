@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""Train and export RogerVIB Micro v0.4.
+
+Architecture: learned hashed 4-character context embedding + GRU + character head.
+Most parameters live in the embedding table, keeping the recurrent compute small enough
+for browser inference while still giving the model ~10M learned parameters.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import random
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+ROOT = Path(__file__).resolve().parents[1]
+CORPUS_PATH = ROOT / "training" / "v04_corpus.jsonl"
+OUT_DIR = ROOT / "models" / "micro-v0.4"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+SEED = 404
+random.seed(SEED)
+torch.manual_seed(SEED)
+
+# ASCII printable characters + newline. 96 output classes.
+VOCAB = ["\n"] + [chr(i) for i in range(32, 127)]
+TO_ID = {c: i for i, c in enumerate(VOCAB)}
+UNK_ID = TO_ID["?"]
+
+HASH_BUCKETS = 104_000
+HIDDEN = 96
+SEQ = 96
+BATCH = 32
+EPOCHS = int(os.environ.get("ROGERVIB_EPOCHS", "8"))
+LR = float(os.environ.get("ROGERVIB_LR", "0.0025"))
+
+
+def sanitize(text: str) -> str:
+    return "".join(c if c in TO_ID else "?" for c in str(text))
+
+
+def fnv1a(text: str) -> int:
+    h = 2166136261
+    for b in text.encode("ascii", "replace"):
+        h ^= b
+        h = (h * 16777619) & 0xFFFFFFFF
+    return h % HASH_BUCKETS
+
+
+def context_hashes(text: str) -> list[int]:
+    # hash at position t is based on up to the last four characters ending at t
+    return [fnv1a(text[max(0, i - 3): i + 1]) for i in range(len(text))]
+
+
+def load_pairs() -> list[tuple[str, str]]:
+    pairs = []
+    with CORPUS_PATH.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            pairs.append((sanitize(row["user"]), sanitize(row["assistant"])))
+    return pairs
+
+
+def variants(text: str) -> list[str]:
+    base = sanitize(text.strip())
+    out = {base, base.lower()}
+    if base.endswith("?"):
+        out.add(base[:-1])
+    else:
+        out.add(base + "?")
+    out.add(base.replace("'", ""))
+    out.add(base.replace("you are", "youre"))
+    out.add(base.replace("i am", "im"))
+    return [x for x in out if x]
+
+
+def build_corpus(pairs: list[tuple[str, str]]) -> str:
+    blocks: list[str] = []
+
+    # Explicit Q/A examples, with small phrasing variants.
+    for user, assistant in pairs:
+        for u in variants(user):
+            blocks.append(f"user: {u}\nroger: {assistant}\n\n")
+
+    # Multi-turn synthetic chats teach the recurrent state that short follow-ups refer
+    # to the current conversation instead of always triggering a canned fallback.
+    followups = [
+        ("huh", "yeah that probably needed a better explanation. what part was confusing?"),
+        ("why", "why what? point me at the thing youre asking about."),
+        ("really", "yep."),
+        ("ok", "yep"),
+        ("what", "what part?"),
+        ("keep going", "sure. what part do you want more detail on?"),
+        ("that makes no sense", "yeah, then i probably messed that answer up. tell me which part and ill try again."),
+    ]
+    for _ in range(900):
+        a = random.choice(pairs)
+        b = random.choice(pairs)
+        f = random.choice(followups)
+        blocks.append(
+            f"user: {a[0]}\nroger: {a[1]}\n"
+            f"user: {f[0]}\nroger: {f[1]}\n"
+            f"user: {b[0]}\nroger: {b[1]}\n\n"
+        )
+
+    # Small synthetic English corpus. This is intentionally plain: it teaches useful
+    # grammar/composition patterns without pretending the model has huge world knowledge.
+    subjects = ["the model", "the program", "the browser", "the player", "the level", "the code", "the network", "the dataset", "the function", "the game"]
+    verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "builds", "reads", "creates"]
+    objects = ["context", "data", "a value", "the next step", "a result", "a small state", "an answer", "a pattern", "a sequence", "the current input"]
+    endings = ["carefully", "during inference", "when needed", "one step at a time", "before returning", "while the program runs", "from the recent context", "without changing the weights"]
+    for _ in range(7000):
+        s = f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}."
+        blocks.append(s + "\n")
+
+    random.shuffle(blocks)
+    # Multiple differently shuffled passes produce enough training characters without
+    # simply repeating the exact same adjacent conversation order.
+    passes = []
+    for _ in range(3):
+        random.shuffle(blocks)
+        passes.append("".join(blocks))
+    text = "".join(passes)
+    print(f"training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
+    return text
+
+
+class RogerVIBV04(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.context = nn.Embedding(HASH_BUCKETS, HIDDEN, sparse=True)
+        self.gru = nn.GRU(HIDDEN, HIDDEN, num_layers=1, batch_first=True)
+        self.head = nn.Linear(HIDDEN, len(VOCAB))
+
+    def forward(self, ids: torch.Tensor, hidden: torch.Tensor | None = None):
+        x = self.context(ids)
+        y, hidden = self.gru(x, hidden)
+        return self.head(y), hidden
+
+
+def parameter_count(model: nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters())
+
+
+def make_sequences(text: str):
+    chars = list(sanitize(text))
+    hashes = context_hashes("".join(chars))
+    targets = [TO_ID.get(c, UNK_ID) for c in chars]
+    # x[t] predicts character t+1
+    xs = hashes[:-1]
+    ys = targets[1:]
+    usable = (len(xs) // SEQ) * SEQ
+    xs = torch.tensor(xs[:usable], dtype=torch.long).reshape(-1, SEQ)
+    ys = torch.tensor(ys[:usable], dtype=torch.long).reshape(-1, SEQ)
+    return xs, ys
+
+
+def train() -> RogerVIBV04:
+    pairs = load_pairs()
+    corpus = build_corpus(pairs)
+    xs, ys = make_sequences(corpus)
+    model = RogerVIBV04()
+    params = parameter_count(model)
+    print(f"parameters: {params:,}")
+
+    # SparseAdam updates only embedding rows touched by this batch; AdamW handles the
+    # small dense recurrent/output core.
+    emb_opt = torch.optim.SparseAdam(model.context.parameters(), lr=LR)
+    dense_params = list(model.gru.parameters()) + list(model.head.parameters())
+    dense_opt = torch.optim.AdamW(dense_params, lr=LR, weight_decay=0.01)
+
+    indices = list(range(xs.shape[0]))
+    model.train()
+    for epoch in range(EPOCHS):
+        random.shuffle(indices)
+        total = 0.0
+        seen = 0
+        for start in range(0, len(indices), BATCH):
+            batch_ids = indices[start:start + BATCH]
+            xb = xs[batch_ids]
+            yb = ys[batch_ids]
+            emb_opt.zero_grad()
+            dense_opt.zero_grad()
+            logits, _ = model(xb)
+            loss = F.cross_entropy(logits.reshape(-1, len(VOCAB)), yb.reshape(-1))
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(dense_params, 1.0)
+            emb_opt.step()
+            dense_opt.step()
+            total += float(loss) * len(batch_ids)
+            seen += len(batch_ids)
+        print(f"epoch {epoch + 1}/{EPOCHS} loss={total / max(seen, 1):.4f}")
+
+    return model
+
+
+class StepModel(nn.Module):
+    """Single-step inference graph used by the browser."""
+    def __init__(self, trained: RogerVIBV04) -> None:
+        super().__init__()
+        self.context = trained.context
+        self.gru = trained.gru
+        self.head = trained.head
+
+    def forward(self, context_id: torch.Tensor, hidden: torch.Tensor):
+        # context_id: [1], hidden: [1,1,HIDDEN]
+        x = self.context(context_id).unsqueeze(1)
+        y, next_hidden = self.gru(x, hidden)
+        logits = self.head(y[:, -1, :])
+        return logits, next_hidden
+
+
+def export(model: RogerVIBV04) -> None:
+    model.eval()
+    params = parameter_count(model)
+    step = StepModel(model).eval()
+    onnx_path = OUT_DIR / "model.onnx"
+    dummy_id = torch.zeros((1,), dtype=torch.long)
+    dummy_hidden = torch.zeros((1, 1, HIDDEN), dtype=torch.float32)
+    torch.onnx.export(
+        step,
+        (dummy_id, dummy_hidden),
+        onnx_path,
+        input_names=["context_id", "hidden"],
+        output_names=["logits", "next_hidden"],
+        opset_version=17,
+        do_constant_folding=True,
+    )
+    config = {
+        "name": "RogerVIB Micro v0.4 Neural",
+        "version": "0.4",
+        "architecture": "hashed 4-char embedding + GRU character language model",
+        "parameter_count": params,
+        "hash_buckets": HASH_BUCKETS,
+        "hidden_size": HIDDEN,
+        "context_chars": 4,
+        "vocab": "".join(VOCAB),
+        "max_reply_chars": 220,
+    }
+    (OUT_DIR / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+    print(f"exported {onnx_path} ({onnx_path.stat().st_size / 1_000_000:.1f} MB)")
+
+
+if __name__ == "__main__":
+    trained = train()
+    export(trained)
