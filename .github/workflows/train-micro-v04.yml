@@ -40,7 +40,58 @@ jobs:
           pip install --quiet numpy
 
       - name: Train and export v0.4 candidate
-        run: python training/train_v04_fast.py
+        id: trainer
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py 2>&1 | tee training/latest_v04_training_log.txt
+
+      - name: Publish training diagnostics
+        if: always()
+        run: |
+          git config user.name 'RogerVIB Trainer'
+          git config user.email 'actions@users.noreply.github.com'
+          if [ ! -f training/latest_v04_training_log.txt ]; then
+            echo 'Trainer did not produce a log.' > training/latest_v04_training_log.txt
+          fi
+          git add training/latest_v04_training_log.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'Report RogerVIB v0.4 training diagnostics [skip ci]'
+            git pull --rebase origin main
+            git push
+          fi
+
+      - name: Reject failed training
+        if: steps.trainer.outcome != 'success'
+        run: |
+          echo 'Trainer failed or exceeded its 12-minute step timeout.'
+          exit 1
+
+      - name: Publish completed candidate preview
+        run: |
+          rm -rf models/micro-v0.4-preview
+          cp -R models/micro-v0.4 models/micro-v0.4-preview
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('models/micro-v0.4-preview/config.json')
+          cfg = json.loads(p.read_text())
+          cfg['name'] = 'RogerVIB Micro v0.4 UNFINISHED CANDIDATE'
+          cfg['preview'] = True
+          cfg['training_epoch'] = 5
+          cfg['training_epochs'] = 5
+          cfg['training_profile'] = 'quality-h112-zero-init-uninterrupted'
+          p.write_text(json.dumps(cfg, indent=2))
+          PY
+          git config user.name 'RogerVIB Trainer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A models/micro-v0.4-preview
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish RogerVIB v0.4 completed candidate preview [skip ci]'
+            git pull --rebase origin main
+            git push
+          fi
 
       - name: Validate generated model
         run: python tests/validate_v04_artifact.py
