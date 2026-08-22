@@ -4,12 +4,12 @@ FAST training corpus: 582,023 characters from 280 curated pairs
 parameters: 10,049,184
 architecture: 88,950 buckets x 112 hidden
 training sequences: 6,062 x 96 chars
-resumed full training state from epoch 6
+resumed full training state from epoch 7
 /home/runner/work/RogerVIB/RogerVIB/training/train_v04_fast.py:152: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
 Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
   total += float(loss) * len(batch_ids)
-EPOCH_COMPLETE epoch=7/10 loss=0.331428
-saved resumable checkpoint: training/checkpoints/v04-epoch-7.pt (120.6 MB)
-exported browser-native v0.4 weights (10.7 MB total, revision 2667ff78ba67baa0)
+EPOCH_COMPLETE epoch=8/10 loss=0.278797
+saved resumable checkpoint: training/checkpoints/v04-epoch-8.pt (120.6 MB)
+exported browser-native v0.4 weights (10.7 MB total, revision 7214af8683da1853)
 browser self-test context_id=2495, probes=[0, 1, 2, 17, 42, 63, 95]
-RESULT_WRITTEN training/epoch-7-result.json
+RESULT_WRITTEN training/epoch-8-result.json
