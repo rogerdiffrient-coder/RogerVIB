@@ -69,7 +69,7 @@ def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epochs: int) -> None:
-    """Export epoch-N weights and push them without disturbing the final model folder."""
+    """Export one midpoint checkpoint without disturbing the final model folder."""
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
     final_out = base.OUT_DIR
     try:
@@ -126,6 +126,7 @@ def train_fast() -> base.RogerVIBV04:
     dense_opt = torch.optim.AdamW(dense_params, lr=base.LR, weight_decay=0.01)
 
     model.train()
+    preview_epoch = max(1, base.EPOCHS // 2)
     for epoch in range(base.EPOCHS):
         order = torch.randperm(xs.shape[0])
         total = 0.0
@@ -146,7 +147,7 @@ def train_fast() -> base.RogerVIBV04:
             seen += len(batch_ids)
         print(f"epoch {epoch + 1}/{base.EPOCHS} loss={total / max(seen, 1):.4f}")
 
-        if epoch + 1 < base.EPOCHS:
+        if epoch + 1 == preview_epoch and epoch + 1 < base.EPOCHS:
             model.eval()
             publish_unfinished_checkpoint(model, epoch + 1, base.EPOCHS)
             model.train()
