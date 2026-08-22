@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import random
 import re
 from pathlib import Path
 
@@ -15,6 +17,7 @@ H = int(CFG["hidden_size"])
 BUCKETS = int(CFG["hash_buckets"])
 VOCAB = list(CFG["vocab"])
 FILES = CFG["files"]
+REPORT_PATH = os.environ.get("ROGERVIB_QUALITY_REPORT", "").strip()
 
 
 def load_i8(key: str) -> np.ndarray:
@@ -59,7 +62,35 @@ def step(context_id: int, hidden: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return logits, next_hidden
 
 
-def generate(user: str, max_chars: int = 100) -> str:
+def sample(logits: np.ndarray, temp: float, top_k: int, recent: str, rng: random.Random) -> int:
+    """Mirror micro/neural-v04-native.js sampling closely, but deterministically."""
+    last = recent[-1:] if recent else ""
+    ranked: list[tuple[float, int]] = []
+    for index, raw in enumerate(logits):
+        score = float(raw)
+        ch = VOCAB[index]
+        if ch == last:
+            score -= 0.28
+        if len(recent) >= 4 and recent.endswith(ch * 4):
+            score -= 2.0
+        if np.isfinite(score):
+            ranked.append((score, index))
+    ranked.sort(reverse=True)
+    ranked = ranked[:top_k]
+    if not ranked:
+        raise RuntimeError("no valid logits")
+    maximum = ranked[0][0]
+    probs = [np.exp((score - maximum) / max(0.05, temp)) for score, _ in ranked]
+    total = float(sum(probs))
+    pick = rng.random() * total
+    for probability, (_, index) in zip(probs, ranked):
+        pick -= float(probability)
+        if pick <= 0:
+            return index
+    return ranked[0][1]
+
+
+def generate(user: str, max_chars: int = 120, seed: int | None = None) -> str:
     prompt = f"user: {user}\nroger: "[-int(CFG.get("prime_chars", 360)):]
     hidden = np.zeros(H, dtype=np.float32)
     seen = ""
@@ -71,8 +102,12 @@ def generate(user: str, max_chars: int = 100) -> str:
 
     answer = ""
     generated = prompt
-    for _ in range(max_chars):
-        token_id = int(np.argmax(logits))
+    rng = random.Random(seed) if seed is not None else None
+    for i in range(max_chars):
+        if rng is None:
+            token_id = int(np.argmax(logits))
+        else:
+            token_id = sample(logits, 0.48 if i < 10 else 0.62, 7 if i < 10 else 11, answer, rng)
         ch = VOCAB[token_id]
         answer += ch
         generated += ch
@@ -91,7 +126,7 @@ def bad_loop(text: str) -> bool:
 
 
 def language_like(text: str) -> bool:
-    """Reject the printable-ASCII punctuation soup the old smoke test allowed."""
+    """Reject printable-ASCII punctuation soup while allowing casual chat."""
     if not text or not re.search(r"[A-Za-z]{2,}", text):
         return False
     visible = [ch for ch in text if ch != "\n"]
@@ -99,18 +134,38 @@ def language_like(text: str) -> bool:
         return False
     alpha_space = sum(ch.isalpha() or ch.isspace() for ch in visible)
     symbol_count = sum(not (ch.isalnum() or ch.isspace() or ch in "'.,!?-:;()") for ch in visible)
-    return alpha_space / len(visible) >= 0.60 and symbol_count / len(visible) <= 0.12
+    return alpha_space / len(visible) >= 0.62 and symbol_count / len(visible) <= 0.08
+
+
+def write_report(lines: list[str]) -> None:
+    if not REPORT_PATH:
+        return
+    path = Path(REPORT_PATH)
+    if not path.is_absolute():
+        path = ROOT / path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> None:
+    report = [
+        "RogerVIB Micro v0.4 candidate quality report",
+        f"artifact_revision={CFG.get('artifact_revision', '')}",
+        f"hidden_size={H}",
+        f"hash_buckets={BUCKETS}",
+        "",
+    ]
+
     test = CFG.get("self_test") or {}
     context_id = fnv1a(str(test.get("context", "")))
     if context_id != int(test.get("context_id", -1)):
+        write_report(report + ["FAIL: self-test hash mismatch"])
         raise SystemExit("self-test hash mismatch")
     logits, _ = step(context_id, np.zeros(H, dtype=np.float32))
     for idx, expected in zip(test.get("logit_indices", []), test.get("logit_values", [])):
         actual = float(logits[int(idx)])
         if abs(actual - float(expected)) > float(test.get("tolerance", 0.06)):
+            write_report(report + [f"FAIL: self-test logit mismatch at {idx}: {actual} vs {expected}"])
             raise SystemExit(f"self-test logit mismatch at {idx}: {actual} vs {expected}")
 
     prompts = [
@@ -123,34 +178,50 @@ def main() -> None:
         "tell me a joke",
         "geometry dash",
     ]
+
+    cases: list[tuple[str, str, str]] = []
+    for prompt in prompts:
+        cases.append((prompt, "greedy", generate(prompt)))
+        for seed in (7, 23):
+            cases.append((prompt, f"sample-{seed}", generate(prompt, seed=seed)))
+
     nonempty = 0
     looping = 0
     language = 0
-    for prompt in prompts:
-        reply = generate(prompt)
-        print(f"> {prompt}\n{reply or '[empty]'}\n")
+    for prompt, mode, reply in cases:
+        ok_language = language_like(reply)
+        ok_loop = not bad_loop(reply)
+        report.extend([
+            f"> {prompt} [{mode}]",
+            reply or "[empty]",
+            f"language_like={ok_language} loop_free={ok_loop}",
+            "",
+        ])
+        print(f"> {prompt} [{mode}]\n{reply or '[empty]'}\n")
         if reply:
             nonempty += 1
-            if bad_loop(reply):
-                looping += 1
-            if language_like(reply):
-                language += 1
-            if any(ord(ch) > 126 and ch != "\n" for ch in reply):
-                raise SystemExit(f"non-ASCII output for {prompt!r}")
+        if not ok_loop:
+            looping += 1
+        if ok_language:
+            language += 1
+        if any(ord(ch) > 126 and ch != "\n" for ch in reply):
+            write_report(report + [f"FAIL: non-ASCII output for {prompt!r} ({mode})"])
+            raise SystemExit(f"non-ASCII output for {prompt!r}")
 
-    if nonempty < 5:
-        raise SystemExit(f"only {nonempty}/{len(prompts)} greedy prompts produced non-empty replies")
-    if looping > 1:
-        raise SystemExit(f"{looping}/{len(prompts)} greedy prompts fell into obvious loops")
-    if language < 6:
-        raise SystemExit(
-            f"only {language}/{len(prompts)} greedy replies looked language-like; refusing to publish gibberish"
-        )
+    total = len(cases)
+    summary = f"RESULT: {nonempty}/{total} non-empty, {language}/{total} language-like, {looping}/{total} looping"
+    report.append(summary)
+    write_report(report)
 
-    print(
-        "PASS: exported v0.4 weights survive deterministic inference smoke tests "
-        f"({nonempty}/{len(prompts)} non-empty, {language}/{len(prompts)} language-like)"
-    )
+    if nonempty < total - 2:
+        raise SystemExit(f"only {nonempty}/{total} candidate replies were non-empty")
+    if looping > 2:
+        raise SystemExit(f"{looping}/{total} candidate replies fell into obvious loops")
+    # Require both greedy and stochastic generation to be consistently language-like.
+    if language < int(total * 0.80):
+        raise SystemExit(f"only {language}/{total} replies looked language-like; refusing to publish candidate")
+
+    print(f"PASS: {summary}")
 
 
 if __name__ == "__main__":
