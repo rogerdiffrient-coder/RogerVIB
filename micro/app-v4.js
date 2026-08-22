@@ -1,8 +1,9 @@
-// RogerVIB Micro app v0.4: real pretrained neural model + v0.2 fallback.
+// RogerVIB Micro app v0.4: neural model with honest automatic fallback.
 (() => {
   const CHATS_KEY='rogervib_micro_chats_v1';
   const ACTIVE_KEY='rogervib_micro_active_chat_v1';
   const DEFAULT_MODEL='neural-v0.4';
+  const BUILD=window.ROGERVIB_BUILD||'dev';
 
   const read=(key,fallback)=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v??fallback;}catch{return fallback;}};
   const write=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
@@ -34,12 +35,19 @@
     let chats=read(CHATS_KEY,[]).map(c=>({...c,model:normalizeModel(c.model),messages:Array.isArray(c.messages)?c.messages:[]}));
     let active=localStorage.getItem(ACTIVE_KEY)||'';
     let neuralLoading=false;
+    let transientStatus='';
     if(!chats.length){const first=makeChat();chats=[first];active=first.id;save();}
     if(!chats.some(c=>c.id===active))active=chats[0].id;
 
     function save(){write(CHATS_KEY,chats);localStorage.setItem(ACTIVE_KEY,active);}
     const activeChat=()=>chats.find(c=>c.id===active);
     const selectedModel=()=>activeChat()?.model||DEFAULT_MODEL;
+
+    function setTransientStatus(text,ms=5500){
+      transientStatus=text||'';
+      updateModelUI();
+      if(text)setTimeout(()=>{if(transientStatus===text){transientStatus='';updateModelUI();}},ms);
+    }
 
     function syncComposerSpace(){
       const h=Math.ceil(composerWrap?.getBoundingClientRect().height||110);
@@ -75,19 +83,21 @@
       const chat=activeChat();if(!chat)return;
       chat.model=normalizeModel(chat.model);
       modelPicker.value=chat.model;
-      if(chat.model==='baseline-v0.2'){
+      if(transientStatus){
+        modelDescription.textContent=transientStatus;
+      }else if(chat.model==='baseline-v0.2'){
         const info=window.RogerVIBMicro?.info;
-        modelDescription.textContent=info?`${info.name} v${info.version} • baseline • ${window.RogerVIBMicro.exampleCount||0} examples`:'Micro v0.2';
+        modelDescription.textContent=info?`${info.name} v${info.version} • baseline • ${window.RogerVIBMicro.exampleCount||0} examples • build ${BUILD}`:`Micro v0.2 • build ${BUILD}`;
       }else{
         const info=window.RogerVIBNeuralV04?.info;
         if(neuralLoading||info?.loading){
-          modelDescription.textContent='Micro v0.4 Neural • loading pretrained weights…';
+          modelDescription.textContent=`Micro v0.4 Neural • loading native weights… • build ${BUILD}`;
         }else if(info?.ready){
-          modelDescription.textContent=`Micro v0.4 Neural • ${Number(info.parameterCount||10049184).toLocaleString()} learned parameters • local inference`;
+          modelDescription.textContent=`Micro v0.4 Neural • ${Number(info.parameterCount||10049184).toLocaleString()} learned parameters • ${info.runtime||'local'} • build ${BUILD}`;
         }else if(info?.error){
-          modelDescription.textContent=`Micro v0.4 Neural • ${info.error}`;
+          modelDescription.textContent=`Micro v0.4 Neural • unavailable: ${info.error} • build ${BUILD}`;
         }else{
-          modelDescription.textContent='Micro v0.4 Neural • pretrained • 10,049,184 parameters';
+          modelDescription.textContent=`Micro v0.4 Neural • pretrained • 10,049,184 parameters • build ${BUILD}`;
         }
       }
       syncComposerSpace();
@@ -99,8 +109,8 @@
         chat.model=normalizeModel(chat.model);
         const entry=document.createElement('div');entry.className=`chat-entry${chat.id===active?' active':''}`;
         const button=document.createElement('button');button.className='chat-item';button.textContent=chat.title;button.title=`${chat.title} · ${modelLabel(chat.model)}`;
-        button.onclick=()=>{active=chat.id;save();renderChats();renderConversation();updateModelUI();};
-        const del=document.createElement('button');del.className='delete-chat';del.textContent='×';del.onclick=e=>{e.stopPropagation();chats=chats.filter(c=>c.id!==chat.id);if(!chats.length)chats=[makeChat()];if(!chats.some(c=>c.id===active))active=chats[0].id;save();renderChats();renderConversation();updateModelUI();};
+        button.onclick=()=>{active=chat.id;transientStatus='';save();renderChats();renderConversation();updateModelUI();};
+        const del=document.createElement('button');del.className='delete-chat';del.textContent='×';del.setAttribute('aria-label',`Delete ${chat.title}`);del.onclick=e=>{e.stopPropagation();chats=chats.filter(c=>c.id!==chat.id);if(!chats.length)chats=[makeChat()];if(!chats.some(c=>c.id===active))active=chats[0].id;save();renderChats();renderConversation();updateModelUI();};
         entry.append(button,del);chatList.append(entry);
       }
     }
@@ -108,16 +118,26 @@
     function resize(){input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,160)}px`;syncComposerSpace();}
 
     async function ensureNeural(){
-      if(window.RogerVIBNeuralV04?.info?.ready)return;
+      if(!window.RogerVIBNeuralV04)throw new Error('v0.4 native runtime did not load');
+      if(window.RogerVIBNeuralV04.info?.ready)return true;
       neuralLoading=true;updateModelUI();
-      try{await window.RogerVIBNeuralV04.load();}
+      try{await window.RogerVIBNeuralV04.load();return true;}
       finally{neuralLoading=false;updateModelUI();}
     }
 
     async function getReply(text,chat){
       if(chat.model==='baseline-v0.2')return window.RogerVIBMicro.reply(text,chat.messages);
-      await ensureNeural();
-      return window.RogerVIBNeuralV04.reply(text,chat.messages);
+      try{
+        await ensureNeural();
+        return await window.RogerVIBNeuralV04.reply(text,chat.messages);
+      }catch(error){
+        const reason=errorText(error)||'unknown v0.4 load error';
+        console.warn('Micro v0.4 unavailable; falling back to v0.2:',reason);
+        chat.model='baseline-v0.2';
+        save();renderChats();
+        setTransientStatus(`Micro v0.4 unavailable (${reason}) • switched this chat to v0.2`);
+        return window.RogerVIBMicro.reply(text,chat.messages);
+      }
     }
 
     async function sendMessage(){
@@ -132,7 +152,7 @@
       }catch(error){
         console.error('RogerVIB chat failed:',error);
         const detail=errorText(error)||'unknown error';
-        chat.messages.push({role:'bot',text:`micro brain crashed: ${detail}`});
+        chat.messages.push({role:'bot',text:`RogerVIB hit an unexpected app error: ${detail}`});
       }finally{
         send.disabled=false;modelPicker.disabled=false;save();renderConversation();updateModelUI();input.focus();
       }
@@ -141,8 +161,8 @@
     form.addEventListener('submit',e=>{e.preventDefault();sendMessage();});
     input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
     input.addEventListener('input',resize);
-    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;chat.model=normalizeModel(modelPicker.value);save();renderChats();updateModelUI();if(chat.model==='neural-v0.4')ensureNeural().catch(()=>{});input.focus();});
-    newChat.onclick=()=>{const inherited=selectedModel();const chat=makeChat();chat.model=inherited;chats.unshift(chat);active=chat.id;save();renderChats();renderConversation();updateModelUI();input.focus();};
+    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;transientStatus='';chat.model=normalizeModel(modelPicker.value);save();renderChats();updateModelUI();if(chat.model==='neural-v0.4')ensureNeural().catch(error=>setTransientStatus(`Micro v0.4 unavailable: ${errorText(error)}`));input.focus();});
+    newChat.onclick=()=>{const inherited=selectedModel();const chat=makeChat();chat.model=inherited;chats.unshift(chat);active=chat.id;transientStatus='';save();renderChats();renderConversation();updateModelUI();input.focus();};
     copy.onclick=async()=>{const chat=activeChat();if(!chat?.messages.length)return;const text=chat.messages.map(m=>`${m.role==='user'?'You':'RogerVIB'}: ${m.text}`).join('\n\n');try{await navigator.clipboard.writeText(text);copy.textContent='Copied!';setTimeout(()=>copy.textContent='Copy Chat',1000);}catch{copy.textContent='Copy failed';}};
     collapse.onclick=()=>{if(innerWidth<=760)sidebar.classList.remove('mobile-open');else sidebar.classList.toggle('collapsed');};
     mobile.onclick=()=>sidebar.classList.toggle('mobile-open');
