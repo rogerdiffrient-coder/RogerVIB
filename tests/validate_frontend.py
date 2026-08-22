@@ -37,6 +37,8 @@ def main() -> None:
     require(APP, "switched this chat to v0.2", 'micro/app-v4.js')
     require(RUNTIME, "runtime:'native-js'", 'micro/neural-v04-native.js')
     require(RUNTIME, "rogervib-gru-i8-v1", 'micro/neural-v04-native.js')
+    require(RUNTIME, "artifact_revision", 'micro/neural-v04-native.js')
+    require(RUNTIME, "runSelfTest", 'micro/neural-v04-native.js')
     require(CSS, '.message-row', 'micro/micro.css')
 
     forbid(INDEX, 'onnxruntime', 'index.html')
@@ -59,6 +61,8 @@ def main() -> None:
 
     for path in (
         ROOT / 'micro' / 'neural-v04.js',
+        ROOT / 'micro' / 'app-v3.js',
+        ROOT / 'micro' / 'pretrained-v03.js',
     ):
         if path.exists():
             fail(f'obsolete runtime still exists: {path.relative_to(ROOT)}')
