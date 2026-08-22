@@ -8,6 +8,7 @@ on:
       - 'training/v04_corpus*.jsonl'
       - 'training/train_v04.py'
       - 'training/train_v04_fast.py'
+      - 'training/v04_status.py'
       - 'tests/validate_v04_artifact.py'
       - 'tests/smoke_v04_inference.py'
       - '.github/workflows/train-micro-v04.yml'
@@ -22,12 +23,16 @@ concurrency:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: REPORT STARTED
+        run: |
+          python3 training/v04_status.py start --message "GitHub Actions run exists and has started executing" --publish
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,62 +44,225 @@ jobs:
           pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           pip install --quiet numpy
 
-      - name: Train and export v0.4 candidate
-        id: trainer
+      # ---------------- EPOCH 1 ----------------
+      - name: Report epoch 1 started
+        run: python training/v04_status.py stage --stage epoch-1-running --publish
+
+      - name: Train epoch 1/5
+        id: epoch1
         continue-on-error: true
-        timeout-minutes: 12
+        timeout-minutes: 5
+        env:
+          ROGERVIB_EPOCH: '1'
+          ROGERVIB_STATE_PATH: training/.v04_state.pt
+          ROGERVIB_CHECKPOINT_DIR: models/micro-v0.4-checkpoints/epoch-1
         run: |
           set -o pipefail
-          python -u training/train_v04_fast.py 2>&1 | tee training/latest_v04_training_log.txt
+          python -u training/train_v04_fast.py 2>&1 | tee training/epoch-1.log
 
-      - name: Publish training diagnostics
+      - name: Upload checkpoint 1/5
         if: always()
-        run: |
-          git config user.name 'RogerVIB Trainer'
-          git config user.email 'actions@users.noreply.github.com'
-          if [ ! -f training/latest_v04_training_log.txt ]; then
-            echo 'Trainer did not produce a log.' > training/latest_v04_training_log.txt
-          fi
-          git add training/latest_v04_training_log.txt
-          if ! git diff --cached --quiet; then
-            git commit -m 'Report RogerVIB v0.4 training diagnostics [skip ci]'
-            git pull --rebase origin main
-            git push
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-epoch-1
+          path: |
+            models/micro-v0.4-checkpoints/epoch-1
+            training/epoch-1.log
+            training/latest_v04_epoch_result.json
+            training/.v04_state.pt
+          if-no-files-found: warn
+          retention-days: 14
 
-      - name: Reject failed training
-        if: steps.trainer.outcome != 'success'
-        run: |
-          echo 'Trainer failed or exceeded its 12-minute step timeout.'
-          exit 1
+      - name: Report checkpoint 1/5
+        if: always()
+        run: python training/v04_status.py epoch --epoch 1 --outcome "${{ steps.epoch1.outcome }}" --artifact "rogervib-v04-${{ github.run_id }}-epoch-1" --publish
 
-      - name: Publish completed candidate preview
+      - name: Stop after epoch 1 failure
+        if: steps.epoch1.outcome != 'success'
+        run: exit 1
+
+      # ---------------- EPOCH 2 ----------------
+      - name: Report epoch 2 started
+        run: python training/v04_status.py stage --stage epoch-2-running --publish
+
+      - name: Train epoch 2/5
+        id: epoch2
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          ROGERVIB_EPOCH: '2'
+          ROGERVIB_STATE_PATH: training/.v04_state.pt
+          ROGERVIB_CHECKPOINT_DIR: models/micro-v0.4-checkpoints/epoch-2
         run: |
-          rm -rf models/micro-v0.4-preview
-          cp -R models/micro-v0.4 models/micro-v0.4-preview
+          set -o pipefail
+          python -u training/train_v04_fast.py 2>&1 | tee training/epoch-2.log
+
+      - name: Upload checkpoint 2/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-epoch-2
+          path: |
+            models/micro-v0.4-checkpoints/epoch-2
+            training/epoch-2.log
+            training/latest_v04_epoch_result.json
+            training/.v04_state.pt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report checkpoint 2/5
+        if: always()
+        run: python training/v04_status.py epoch --epoch 2 --outcome "${{ steps.epoch2.outcome }}" --artifact "rogervib-v04-${{ github.run_id }}-epoch-2" --publish
+
+      - name: Stop after epoch 2 failure
+        if: steps.epoch2.outcome != 'success'
+        run: exit 1
+
+      # ---------------- EPOCH 3 ----------------
+      - name: Report epoch 3 started
+        run: python training/v04_status.py stage --stage epoch-3-running --publish
+
+      - name: Train epoch 3/5
+        id: epoch3
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          ROGERVIB_EPOCH: '3'
+          ROGERVIB_STATE_PATH: training/.v04_state.pt
+          ROGERVIB_CHECKPOINT_DIR: models/micro-v0.4-checkpoints/epoch-3
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py 2>&1 | tee training/epoch-3.log
+
+      - name: Upload checkpoint 3/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-epoch-3
+          path: |
+            models/micro-v0.4-checkpoints/epoch-3
+            training/epoch-3.log
+            training/latest_v04_epoch_result.json
+            training/.v04_state.pt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report checkpoint 3/5
+        if: always()
+        run: python training/v04_status.py epoch --epoch 3 --outcome "${{ steps.epoch3.outcome }}" --artifact "rogervib-v04-${{ github.run_id }}-epoch-3" --publish
+
+      - name: Stop after epoch 3 failure
+        if: steps.epoch3.outcome != 'success'
+        run: exit 1
+
+      # ---------------- EPOCH 4 ----------------
+      - name: Report epoch 4 started
+        run: python training/v04_status.py stage --stage epoch-4-running --publish
+
+      - name: Train epoch 4/5
+        id: epoch4
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          ROGERVIB_EPOCH: '4'
+          ROGERVIB_STATE_PATH: training/.v04_state.pt
+          ROGERVIB_CHECKPOINT_DIR: models/micro-v0.4-checkpoints/epoch-4
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py 2>&1 | tee training/epoch-4.log
+
+      - name: Upload checkpoint 4/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-epoch-4
+          path: |
+            models/micro-v0.4-checkpoints/epoch-4
+            training/epoch-4.log
+            training/latest_v04_epoch_result.json
+            training/.v04_state.pt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report checkpoint 4/5
+        if: always()
+        run: python training/v04_status.py epoch --epoch 4 --outcome "${{ steps.epoch4.outcome }}" --artifact "rogervib-v04-${{ github.run_id }}-epoch-4" --publish
+
+      - name: Stop after epoch 4 failure
+        if: steps.epoch4.outcome != 'success'
+        run: exit 1
+
+      # ---------------- EPOCH 5 ----------------
+      - name: Report epoch 5 started
+        run: python training/v04_status.py stage --stage epoch-5-running --publish
+
+      - name: Train epoch 5/5
+        id: epoch5
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          ROGERVIB_EPOCH: '5'
+          ROGERVIB_STATE_PATH: training/.v04_state.pt
+          ROGERVIB_CHECKPOINT_DIR: models/micro-v0.4-checkpoints/epoch-5
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py 2>&1 | tee training/epoch-5.log
+
+      - name: Upload checkpoint 5/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-epoch-5
+          path: |
+            models/micro-v0.4-checkpoints/epoch-5
+            training/epoch-5.log
+            training/latest_v04_epoch_result.json
+            training/.v04_state.pt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report checkpoint 5/5
+        if: always()
+        run: python training/v04_status.py epoch --epoch 5 --outcome "${{ steps.epoch5.outcome }}" --artifact "rogervib-v04-${{ github.run_id }}-epoch-5" --publish
+
+      - name: Stop after epoch 5 failure
+        if: steps.epoch5.outcome != 'success'
+        run: exit 1
+
+      # ---------------- VALIDATE / QUALITY / PUBLISH ----------------
+      - name: Promote epoch 5 to final candidate path
+        run: |
+          rm -rf models/micro-v0.4
+          cp -R models/micro-v0.4-checkpoints/epoch-5 models/micro-v0.4
           python - <<'PY'
           import json
           from pathlib import Path
-          p = Path('models/micro-v0.4-preview/config.json')
+          p = Path('models/micro-v0.4/config.json')
           cfg = json.loads(p.read_text())
-          cfg['name'] = 'RogerVIB Micro v0.4 UNFINISHED CANDIDATE'
-          cfg['preview'] = True
-          cfg['training_epoch'] = 5
-          cfg['training_epochs'] = 5
-          cfg['training_profile'] = 'quality-h112-zero-init-uninterrupted'
+          cfg['name'] = 'RogerVIB Micro v0.4 Neural'
+          cfg['checkpoint'] = False
+          cfg['candidate_run_id'] = '${{ github.run_id }}'
           p.write_text(json.dumps(cfg, indent=2))
           PY
-          git config user.name 'RogerVIB Trainer'
-          git config user.email 'actions@users.noreply.github.com'
-          git add -A models/micro-v0.4-preview
-          if ! git diff --cached --quiet; then
-            git commit -m 'Publish RogerVIB v0.4 completed candidate preview [skip ci]'
-            git pull --rebase origin main
-            git push
-          fi
+
+      - name: Report validation started
+        run: python training/v04_status.py stage --stage validating --publish
 
       - name: Validate generated model
+        id: validation
+        continue-on-error: true
         run: python tests/validate_v04_artifact.py
+
+      - name: Report validation result
+        if: always()
+        run: python training/v04_status.py stage --stage "validation-${{ steps.validation.outcome }}" --publish
+
+      - name: Stop after validation failure
+        if: steps.validation.outcome != 'success'
+        run: exit 1
+
+      - name: Report quality test started
+        run: python training/v04_status.py stage --stage quality-testing --publish
 
       - name: Browser-like quality test
         id: quality
@@ -103,9 +271,19 @@ jobs:
           ROGERVIB_QUALITY_REPORT: training/latest_v04_quality_report.txt
         run: python tests/smoke_v04_inference.py
 
-      - name: Publish candidate quality report
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-quality-report
+          path: training/latest_v04_quality_report.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish quality report and status
         if: always()
         run: |
+          python training/v04_status.py stage --stage "quality-${{ steps.quality.outcome }}" --publish
           git config user.name 'RogerVIB Trainer'
           git config user.email 'actions@users.noreply.github.com'
           if [ ! -f training/latest_v04_quality_report.txt ]; then
@@ -115,26 +293,37 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m 'Report RogerVIB v0.4 candidate quality [skip ci]'
             git pull --rebase origin main
-            git push
+            git push origin HEAD:main
           fi
 
-      - name: Reject failed candidate
+      - name: Stop after quality failure
         if: steps.quality.outcome != 'success'
-        run: |
-          echo 'Candidate failed browser-like quality checks. Final model will not be published.'
-          exit 1
+        run: exit 1
+
+      - name: Report final publish started
+        run: python training/v04_status.py stage --stage publishing-final --publish
 
       - name: Commit pretrained model artifact
         run: |
           git config user.name 'RogerVIB Trainer'
           git config user.email 'actions@users.noreply.github.com'
           git add -A models/micro-v0.4
-          if git diff --cached --quiet; then
-            echo 'Model artifact unchanged.'
-            exit 0
+          if ! git diff --cached --quiet; then
+            git commit -m 'Train RogerVIB Micro v0.4 quality neural model [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
-          git commit -m 'Train RogerVIB Micro v0.4 quality neural model [skip ci]'
-          git pull --rebase origin main
-          git push
 
-# manual retrigger: 2026-08-22
+      - name: Upload final published model
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-${{ github.run_id }}-FINAL
+          path: models/micro-v0.4
+          retention-days: 30
+
+      - name: REPORT SUCCESS
+        run: python training/v04_status.py finish --outcome passed --message "all 5 checkpoints, validation, browser-like quality test, and final publish succeeded" --publish
+
+      - name: REPORT FAILURE
+        if: failure()
+        run: python training/v04_status.py finish --outcome failed --message "workflow failed; inspect latest status, epoch artifacts, and logs" --publish
