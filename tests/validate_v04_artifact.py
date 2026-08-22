@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +41,9 @@ def main() -> None:
 
     if cfg.get("format") != EXPECTED_FORMAT:
         fail(f"config format is {cfg.get('format')!r}; expected {EXPECTED_FORMAT!r}")
+    revision = str(cfg.get("artifact_revision", ""))
+    if not re.fullmatch(r"[0-9a-f]{16}", revision):
+        fail(f"artifact_revision is invalid: {revision!r}")
     if int(cfg.get("parameter_count", 0)) != EXPECTED_PARAMS:
         fail(f"parameter_count is {cfg.get('parameter_count')}; expected {EXPECTED_PARAMS}")
     if int(cfg.get("hidden_size", 0)) != EXPECTED_HIDDEN:
@@ -123,7 +127,7 @@ def main() -> None:
 
     total_bytes = sum((MODEL_DIR / files[k]).stat().st_size for k in expected)
     print("PASS: v0.4 artifact is internally consistent")
-    print(f"      {EXPECTED_PARAMS:,} parameters, {pairs} curated pairs, {total_bytes/1_000_000:.2f} MB shipped weights")
+    print(f"      revision {revision}, {EXPECTED_PARAMS:,} parameters, {pairs} curated pairs, {total_bytes/1_000_000:.2f} MB shipped weights")
 
 
 if __name__ == "__main__":
