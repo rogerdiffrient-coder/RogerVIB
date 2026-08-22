@@ -5,12 +5,12 @@ RogerVIB v0.5 "Damn Daniel"
 parameters: 24,999,992
 architecture: 163,459 buckets x 152 hidden
 training sequences: 6,062 x 96 chars
-resumed Damn Daniel from epoch 17
+resumed Damn Daniel from epoch 18
 /home/runner/work/RogerVIB/RogerVIB/training/train_v05.py:104: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
 Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
   total += float(loss) * len(batch_ids)
-DAMN_DANIEL_EPOCH_COMPLETE epoch=18/25 loss=0.159236
-saved resumable Damn Daniel checkpoint: training/checkpoints/v05-epoch-18.pt (300.0 MB)
-exported browser-native v0.4 weights (26.1 MB total, revision 5155148fb8e2016d)
+DAMN_DANIEL_EPOCH_COMPLETE epoch=19/25 loss=0.157463
+saved resumable Damn Daniel checkpoint: training/checkpoints/v05-epoch-19.pt (300.0 MB)
+exported browser-native v0.4 weights (26.1 MB total, revision 5d3437af6fcc25f7)
 browser self-test context_id=55790, probes=[0, 1, 2, 17, 42, 63, 95]
-RESULT_WRITTEN training/v05-epoch-18-result.json
+RESULT_WRITTEN training/v05-epoch-19-result.json
