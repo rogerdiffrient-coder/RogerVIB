@@ -1,0 +1,10 @@
+{
+  "name": "Damn Daniel",
+  "version": "0.5",
+  "epoch": 13,
+  "total_epochs": 25,
+  "loss": 0.1792633764836624,
+  "parameter_count": 24999992,
+  "checkpoint": "training/checkpoints/v05-epoch-13.pt",
+  "export_dir": "models/micro-v0.5-epoch-13"
+}
