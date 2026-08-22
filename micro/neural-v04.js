@@ -22,13 +22,17 @@
   let session=null;
   let loadPromise=null;
   let vocab=[];
-  let toId=new Map();
+
+  const errorText=error=>{
+    if(error instanceof Error&&error.message)return error.message;
+    if(typeof error==='string')return error;
+    try{return JSON.stringify(error);}catch{return String(error);}
+  };
 
   function fnv1a(text,buckets){
     let h=2166136261>>>0;
     for(let i=0;i<text.length;i++){
-      const code=text.charCodeAt(i)&0x7f;
-      h^=code;
+      h^=(text.charCodeAt(i)&0x7f);
       h=Math.imul(h,16777619)>>>0;
     }
     return h%buckets;
@@ -45,24 +49,42 @@
       INFO.loading=true;INFO.error='';
       try{
         if(!window.ort)throw new Error('ONNX Runtime Web did not load');
+
+        // GitHub Pages is not cross-origin isolated. Multithreaded WASM can fail there,
+        // and this model's recurrent core is small enough that one thread is preferable.
         window.ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
-        window.ort.env.wasm.numThreads=Math.max(1,Math.min(4,navigator.hardwareConcurrency||2));
-        const response=await fetch(CONFIG_URL,{cache:'no-cache'});
-        if(!response.ok)throw new Error(`pretrained v0.4 config unavailable (HTTP ${response.status})`);
+        window.ort.env.wasm.numThreads=1;
+        window.ort.env.wasm.proxy=false;
+
+        const response=await fetch(CONFIG_URL,{cache:'no-store'});
+        if(!response.ok)throw new Error(`v0.4 config failed to load (HTTP ${response.status})`);
         config=await response.json();
         vocab=[...String(config.vocab||'')];
-        toId=new Map(vocab.map((c,i)=>[c,i]));
+        if(!vocab.length)throw new Error('v0.4 config has an empty vocabulary');
+
         INFO.parameterCount=Number(config.parameter_count)||INFO.parameterCount;
         INFO.architecture=config.architecture||INFO.architecture;
+
         session=await window.ort.InferenceSession.create(MODEL_URL,{
           executionProviders:['wasm'],
           graphOptimizationLevel:'all'
         });
+
+        const inputs=session.inputNames||[];
+        const outputs=session.outputNames||[];
+        if(!inputs.includes('context_id')||!inputs.includes('hidden')){
+          throw new Error(`v0.4 model inputs are wrong: ${inputs.join(', ')||'(none)'}`);
+        }
+        if(!outputs.includes('logits')||!outputs.includes('next_hidden')){
+          throw new Error(`v0.4 model outputs are wrong: ${outputs.join(', ')||'(none)'}`);
+        }
+
         INFO.ready=true;
         return true;
       }catch(error){
-        session=null;config=null;INFO.ready=false;INFO.error=error?.message||String(error);
-        throw error;
+        session=null;config=null;INFO.ready=false;INFO.error=errorText(error)||'unknown neural runtime error';
+        console.error('RogerVIB v0.4 load failed:',error);
+        throw new Error(INFO.error);
       }finally{
         INFO.loading=false;loadPromise=null;
       }
@@ -72,26 +94,39 @@
 
   function hashEndingAt(text){
     const width=Number(config?.context_chars)||4;
-    const slice=text.slice(-width);
-    return fnv1a(slice,Number(config?.hash_buckets)||104000);
+    return fnv1a(text.slice(-width),Number(config?.hash_buckets)||104000);
   }
 
   async function step(contextId,hidden){
+    if(!session||!config)throw new Error('v0.4 inference session is not loaded');
+    const hiddenSize=Number(config.hidden_size)||96;
     const feeds={
       context_id:new window.ort.Tensor('int64',BigInt64Array.of(BigInt(contextId)),[1]),
-      hidden:new window.ort.Tensor('float32',hidden,[1,1,Number(config.hidden_size)])
+      hidden:new window.ort.Tensor('float32',hidden,[1,1,hiddenSize])
     };
-    const out=await session.run(feeds);
-    return {
-      logits:out.logits.data,
-      hidden:new Float32Array(out.next_hidden.data)
-    };
+
+    let out;
+    try{out=await session.run(feeds);}
+    catch(error){throw new Error(`ONNX inference failed: ${errorText(error)||'unknown error'}`);}
+
+    const logits=out?.logits;
+    const nextHidden=out?.next_hidden;
+    if(!logits||!nextHidden){
+      throw new Error(`ONNX returned unexpected outputs: ${Object.keys(out||{}).join(', ')||'(none)'}`);
+    }
+    if(!logits.data?.length||!nextHidden.data?.length){
+      throw new Error('ONNX returned empty tensors');
+    }
+
+    return {logits:logits.data,hidden:new Float32Array(nextHidden.data)};
   }
 
   function sample(logits,temperature=0.62,topK=10){
     const ranked=Array.from(logits,(value,index)=>({value:Number(value),index}))
+      .filter(x=>Number.isFinite(x.value))
       .sort((a,b)=>b.value-a.value).slice(0,topK);
-    const max=ranked[0]?.value||0;
+    if(!ranked.length)throw new Error('v0.4 produced no valid logits');
+    const max=ranked[0].value;
     const weights=ranked.map(x=>Math.exp((x.value-max)/temperature));
     const total=weights.reduce((a,b)=>a+b,0);
     let r=Math.random()*total;
@@ -99,7 +134,7 @@
       r-=weights[i];
       if(r<=0)return ranked[i].index;
     }
-    return ranked[0]?.index||0;
+    return ranked[0].index;
   }
 
   function historyPrompt(input,history=[]){
@@ -118,22 +153,22 @@
     return lines.join('\n');
   }
 
+  const yieldFrame=()=>new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+
   async function reply(input,history=[]){
     await load();
     const hiddenSize=Number(config.hidden_size)||96;
     let hidden=new Float32Array(hiddenSize);
-    let prompt=historyPrompt(input,history);
+    const prompt=historyPrompt(input,history);
     let state=null;
 
-    // Prime the recurrent state with recent conversation context.
-    // Keep the tail bounded so long chats do not make every reply slower forever.
-    const prime=prompt.slice(-1400);
+    const prime=prompt.slice(-900);
     let seen='';
     for(let i=0;i<prime.length;i++){
       seen+=prime[i];
       state=await step(hashEndingAt(seen),hidden);
       hidden=state.hidden;
-      if((i&63)===63)await new Promise(requestAnimationFrame);
+      if((i&31)===31)await yieldFrame();
     }
 
     if(!state)state=await step(hashEndingAt(' '),hidden);
@@ -150,7 +185,7 @@
       if(answer.endsWith('\n\n')||answer.includes('\nuser:'))break;
       const next=await step(hashEndingAt(generated),hidden);
       logits=next.logits;hidden=next.hidden;
-      if((i&7)===7)await new Promise(requestAnimationFrame);
+      if((i&7)===7)await yieldFrame();
     }
 
     answer=answer.replace(/\nuser:[\s\S]*$/,'').replace(/\n\n[\s\S]*$/,'').trim();
