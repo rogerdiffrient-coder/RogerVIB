@@ -7,100 +7,65 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>RogerVIB Micro</title>
-  <link rel="stylesheet" href="styles.css?v=2.3.6" />
-  <link rel="stylesheet" href="markdown.css?v=2.3.6" />
-  <link rel="stylesheet" href="micro/micro.css?v=2.3.6" />
+  <link rel="stylesheet" href="styles.css?v=2.3.7" />
+  <link rel="stylesheet" href="markdown.css?v=2.3.7" />
+  <link rel="stylesheet" href="micro/micro.css?v=2.3.7" />
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand-row">
-        <div class="brand">RogerVIB</div>
-        <button class="icon-button" id="collapseButton" aria-label="Collapse sidebar">◧</button>
-      </div>
+      <div class="brand-row"><div class="brand">RogerVIB</div><button class="icon-button" id="collapseButton" aria-label="Collapse sidebar">◧</button></div>
       <button class="new-chat" id="newChatButton"><span class="new-chat-icon">✎</span><span>New chat</span></button>
-      <div class="sidebar-section-title">Chats</div>
-      <div class="chat-list" id="chatList"></div>
+      <div class="sidebar-section-title">Chats</div><div class="chat-list" id="chatList"></div>
     </aside>
-
     <main class="main-panel">
-      <header class="topbar">
-        <button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button>
-        <div class="topbar-spacer"></div>
-        <button class="copy-chat-button" id="unfinishedModelButton" type="button" aria-label="Talk to unfinished RogerVIB">Talk to unfinished model</button>
-        <button class="copy-chat-button" id="copyChatButton" type="button" aria-label="Copy current chat">Copy Chat</button>
-      </header>
-
-      <section class="conversation" id="conversation">
-        <div class="empty-state" id="emptyState">
-          <div class="logo-orb">R</div>
-          <h1>RogerVIB Micro</h1>
-          <p id="modelDescription">Loading Micro v0.4 neural weights…</p>
-        </div>
-      </section>
-
+      <header class="topbar"><button class="mobile-sidebar-button" id="mobileSidebarButton" aria-label="Open sidebar">☰</button><div class="topbar-spacer"></div><button class="copy-chat-button" id="unfinishedModelButton" type="button" aria-label="Talk to unfinished RogerVIB">Talk to unfinished model</button><button class="copy-chat-button" id="copyChatButton" type="button" aria-label="Copy current chat">Copy Chat</button></header>
+      <section class="conversation" id="conversation"><div class="empty-state" id="emptyState"><div class="logo-orb">R</div><h1>RogerVIB Micro</h1><p id="modelDescription">Loading Micro v0.5 Damn Daniel weights…</p></div></section>
       <div class="composer-wrap">
         <form class="composer" id="chatForm">
           <textarea id="messageInput" rows="1" placeholder="Message RogerVIB" aria-label="Message RogerVIB"></textarea>
           <div class="composer-bottom">
-            <div class="micro-model-controls">
-              <select id="microModelPicker" class="micro-model-picker" aria-label="Choose RogerVIB model">
-                <option value="neural-v0.4">Micro v0.4 — Neural</option>
-                <option value="baseline-v0.2">Micro v0.2 — Baseline</option>
-              </select>
-            </div>
-            <div class="composer-actions">
-              <button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button>
-            </div>
+            <div class="micro-model-controls"><select id="microModelPicker" class="micro-model-picker" aria-label="Choose RogerVIB model">
+              <option value="neural-v0.5">Micro v0.5 — Damn Daniel</option>
+              <option value="neural-v0.4">Micro v0.4 — Neural</option>
+              <option value="baseline-v0.2">Micro v0.2 — Baseline</option>
+            </select></div>
+            <div class="composer-actions"><button class="send-button" id="sendButton" type="submit" aria-label="Send">↑</button></div>
           </div>
         </form>
-        <div class="disclaimer" id="microDisclaimer">RogerVIB Micro runs locally. Neural models are pretrained in the developer build pipeline. · build 2.3.6</div>
+        <div class="disclaimer" id="microDisclaimer">RogerVIB Micro runs locally. Neural models are pretrained in the developer build pipeline. · build 2.3.7</div>
       </div>
     </main>
   </div>
-
   <script>
-    window.ROGERVIB_BUILD='2.3.6';
-    (() => {
-      const params=new URLSearchParams(location.search);
-      const preview=params.get('unfinished')==='1';
-      window.ROGERVIB_PREVIEW_MODE=preview;
-
-      // The normal neural runtime always asks for models/micro-v0.4/*. In unfinished
-      // mode, redirect only those model fetches to the live mid-training checkpoint.
+    window.ROGERVIB_BUILD='2.3.7';
+    (()=>{
+      const params=new URLSearchParams(location.search),preview=params.get('unfinished')==='1';window.ROGERVIB_PREVIEW_MODE=preview;
       if(preview){
         const nativeFetch=window.fetch.bind(window);
         window.fetch=(input,init)=>{
-          if(typeof input==='string'&&input.startsWith('models/micro-v0.4/')){
-            input=input.replace('models/micro-v0.4/','models/micro-v0.4-preview/');
+          if(typeof input==='string'){
+            if(input.startsWith('models/micro-v0.5/'))input=input.replace('models/micro-v0.5/','models/micro-v0.5-preview/');
+            else if(input.startsWith('models/micro-v0.4/'))input=input.replace('models/micro-v0.4/','models/micro-v0.4-preview/');
           }
           return nativeFetch(input,init);
         };
       }
-
       window.addEventListener('DOMContentLoaded',()=>{
-        const button=document.getElementById('unfinishedModelButton');
-        const disclaimer=document.getElementById('microDisclaimer');
-        if(!button)return;
-        button.textContent=preview?'Return to final model':'Talk to unfinished model';
-        button.title=preview?'Leave the mid-training checkpoint':'Load the newest checkpoint exported before training finished';
-        if(preview&&disclaimer){
-          disclaimer.textContent='⚠ UNFINISHED CHECKPOINT MODE — these weights were exported mid-training and may be spectacularly stupid. · build 2.3.6';
-        }
-        button.addEventListener('click',()=>{
-          const next=new URL(location.href);
-          if(preview)next.searchParams.delete('unfinished');
-          else next.searchParams.set('unfinished','1');
-          location.href=next.toString();
-        });
+        const button=document.getElementById('unfinishedModelButton'),disclaimer=document.getElementById('microDisclaimer');if(!button)return;
+        button.textContent=preview?'Return to final models':'Talk to unfinished model';
+        button.title=preview?'Leave checkpoint mode':'Load the newest checkpoint for the selected neural model';
+        if(preview&&disclaimer)disclaimer.textContent='⚠ UNFINISHED CHECKPOINT MODE — v0.5 and v0.4 selections load their latest preview weights. · build 2.3.7';
+        button.addEventListener('click',()=>{const next=new URL(location.href);if(preview)next.searchParams.delete('unfinished');else next.searchParams.set('unfinished','1');location.href=next.toString();});
       });
     })();
   </script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-  <script src="tools/markdown-renderer.js?v=2.3.6"></script>
-  <script src="micro/model.js?v=2.3.6"></script>
-  <script src="micro/neural-v04-native.js?v=2.3.6"></script>
-  <script src="micro/app-v4.js?v=2.3.6"></script>
+  <script src="tools/markdown-renderer.js?v=2.3.7"></script>
+  <script src="micro/model.js?v=2.3.7"></script>
+  <script src="micro/neural-v04-native.js?v=2.3.7"></script>
+  <script src="micro/neural-v05-native.js?v=2.3.7"></script>
+  <script src="micro/app-v5.js?v=2.3.7"></script>
 </body>
 </html>
