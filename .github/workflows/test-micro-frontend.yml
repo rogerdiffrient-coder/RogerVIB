@@ -1,0 +1,33 @@
+name: Test RogerVIB Micro frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'micro/**'
+      - 'tests/validate_frontend.py'
+      - '.github/workflows/test-micro-frontend.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'micro/**'
+      - 'tests/validate_frontend.py'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production wiring
+        run: python tests/validate_frontend.py
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check micro/model.js
+          node --check micro/neural-v04-native.js
+          node --check micro/app-v4.js
+          node --check tools/markdown-renderer.js
