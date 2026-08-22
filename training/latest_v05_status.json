@@ -1,12 +1,12 @@
 {
   "name": "Damn Daniel",
   "version": "0.5",
-  "phase": "EPOCH_COMPLETE",
-  "detail": "Damn Daniel epoch 25/25 finished; checkpoint uploaded and preview refreshed",
+  "phase": "QUALITY_COMPLETE",
+  "detail": "Damn Daniel browser-like quality test completed",
   "epoch": 25,
   "total_epochs": 25,
   "run_id": "32579064358",
   "run_attempt": "1",
   "source_sha": "bd064e8fced2ae591cfdff8580fa96ea5faaa83f",
-  "updated_at": "2026-08-22T14:41:01Z"
+  "updated_at": "2026-08-22T14:41:05Z"
 }

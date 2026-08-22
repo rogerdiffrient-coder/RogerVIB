@@ -1,0 +1,103 @@
+RogerVIB v0.5 Damn Daniel candidate quality report
+artifact_revision=26b20e2a1be57b6f
+hidden_size=152
+hash_buckets=163459
+
+> hi [greedy]
+hey! whats up?
+language_like=True loop_free=True
+
+> hi [sample-7]
+hey! whats up?
+language_like=True loop_free=True
+
+> hi [sample-23]
+cya
+language_like=True loop_free=True
+
+> how is it going [greedy]
+sure. what do you want me to continue from?
+language_like=True loop_free=True
+
+> how is it going [sample-7]
+sure. what do you want me to continue from?
+language_like=True loop_free=True
+
+> how is it going [sample-23]
+my bad. say it another way or point out what i got wrong and ill try again.
+language_like=True loop_free=True
+
+> who are you [greedy]
+doing suspiciously well for ten million parameters was apparently not enough, so now ten million numbers are collaborati
+language_like=True loop_free=True
+
+> who are you [sample-7]
+doing suspiciously well for ten million parameters.
+language_like=True loop_free=True
+
+> who are you [sample-23]
+integration testing checks whether multiple parts of a system work correctly together.
+language_like=True loop_free=True
+
+> still broken [greedy]
+then the last fix didnt solve the real cause. lets use the exact error and trace it.
+language_like=True loop_free=True
+
+> still broken [sample-7]
+then the last fix didnt solve the real cause. lets use the exact error and trace it.
+language_like=True loop_free=True
+
+> still broken [sample-23]
+then the last fix didnt solve the real cause. lets use the exact error and trace it.
+language_like=True loop_free=True
+
+> what is a neural network [greedy]
+a neural network calculations.
+language_like=True loop_free=True
+
+> what is a neural network [sample-7]
+a commit is a saved snapshot of changes in a Git repository with a message describing the change.
+coding is writing inst
+language_like=True loop_free=True
+
+> what is a neural network [sample-23]
+reproduce the bug, inspect the exact failing state, test one assumptions instead of jumping to the first answer.
+language_like=True loop_free=True
+
+> im confused [greedy]
+then the last fix didnt solve the real cause. lets use the exact error and trace it.
+language_like=True loop_free=True
+
+> im confused [sample-7]
+then the last fix didnt solve the real cause. lets use the exact error and trace it.
+language_like=True loop_free=True
+
+> im confused [sample-23]
+technically im a language model, just extremely small compared with modern LLMs.
+language_like=True loop_free=True
+
+> tell me a joke [greedy]
+my context window is the amount of recent input a model can directly use for a prediction.
+language_like=True loop_free=True
+
+> tell me a joke [sample-7]
+my context window walked into a bar. it forgot why halfway through.
+language_like=True loop_free=True
+
+> tell me a joke [sample-23]
+cya
+language_like=True loop_free=True
+
+> geometry dash [greedy]
+i read the conversation, append it, then repeat.
+language_like=True loop_free=True
+
+> geometry dash [sample-7]
+i can remember what is still in this chat context, not everything forever.
+language_like=True loop_free=True
+
+> geometry dash [sample-23]
+pretty good for a tiny neural network calculations.
+language_like=True loop_free=True
+
+RESULT: 24/24 non-empty, 24/24 language-like, 0/24 looping
