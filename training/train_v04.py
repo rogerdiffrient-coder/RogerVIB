@@ -30,8 +30,6 @@ VOCAB = ["\n"] + [chr(i) for i in range(32, 127)]
 TO_ID = {c: i for i, c in enumerate(VOCAB)}
 UNK_ID = TO_ID["?"]
 
-# 104,000 * 96 = 9,984,000 parameters in the context table.
-# Small GRU + output head brings total to 10,049,184 parameters.
 HASH_BUCKETS = 104_000
 HIDDEN = 96
 SEQ = 96
@@ -121,8 +119,6 @@ def build_corpus(pairs: list[tuple[str, str]]) -> str:
             f"user: {b[0]}\nroger: {b[1]}\n\n"
         )
 
-    # Extra plain English gives the character model more grammatical transitions without
-    # pretending to provide giant-model world knowledge.
     subjects = ["the model", "the program", "the browser", "the player", "the level", "the code", "the network", "the dataset", "the function", "the game", "the test", "the user"]
     verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "builds", "reads", "creates", "returns", "loads"]
     objects = ["context", "data", "a value", "the next step", "a result", "a small state", "an answer", "a pattern", "a sequence", "the current input", "the model weights", "an error"]
@@ -208,11 +204,31 @@ def write_f32(name: str, tensor: torch.Tensor) -> None:
     (OUT_DIR / name).write_bytes(arr.tobytes(order="C"))
 
 
+def sigmoid_np(x: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-np.clip(x, -20.0, 20.0)))
+
+
+def native_step_reference(model: RogerVIBV04, quant: np.ndarray, scales: np.ndarray, context_id: int) -> np.ndarray:
+    """Match the browser's one-step GRU math using quantized embedding weights."""
+    h = np.zeros((HIDDEN,), dtype=np.float32)
+    x = quant[context_id].astype(np.float32) * scales[context_id]
+    wih = model.gru.weight_ih_l0.detach().cpu().numpy().astype(np.float32)
+    whh = model.gru.weight_hh_l0.detach().cpu().numpy().astype(np.float32)
+    bih = model.gru.bias_ih_l0.detach().cpu().numpy().astype(np.float32)
+    bhh = model.gru.bias_hh_l0.detach().cpu().numpy().astype(np.float32)
+    r = sigmoid_np(wih[:HIDDEN] @ x + bih[:HIDDEN] + whh[:HIDDEN] @ h + bhh[:HIDDEN])
+    z = sigmoid_np(wih[HIDDEN:2*HIDDEN] @ x + bih[HIDDEN:2*HIDDEN] + whh[HIDDEN:2*HIDDEN] @ h + bhh[HIDDEN:2*HIDDEN])
+    n = np.tanh(wih[2*HIDDEN:] @ x + bih[2*HIDDEN:] + r * (whh[2*HIDDEN:] @ h + bhh[2*HIDDEN:]))
+    h_next = ((1.0 - z) * n + z * h).astype(np.float32)
+    head_w = model.head.weight.detach().cpu().numpy().astype(np.float32)
+    head_b = model.head.bias.detach().cpu().numpy().astype(np.float32)
+    return (head_w @ h_next + head_b).astype(np.float32)
+
+
 def export(model: RogerVIBV04) -> None:
     model.eval()
     params = parameter_count(model)
 
-    # Per-row int8 quantization cuts the giant embedding table from ~40 MB to ~10 MB.
     emb = model.context.weight.detach().cpu().numpy().astype(np.float32, copy=False)
     scales = np.max(np.abs(emb), axis=1).astype(np.float32) / 127.0
     scales[scales == 0] = 1.0
@@ -232,6 +248,11 @@ def export(model: RogerVIBV04) -> None:
         if path.exists():
             path.unlink()
 
+    test_context = "test"
+    test_context_id = fnv1a(test_context)
+    test_logits = native_step_reference(model, quant, scales, test_context_id)
+    probe_indices = [0, 1, 2, 17, 42, 63, 95]
+
     config = {
         "name": "RogerVIB Micro v0.4 Neural",
         "version": "0.4",
@@ -243,7 +264,14 @@ def export(model: RogerVIBV04) -> None:
         "context_chars": 4,
         "vocab": "".join(VOCAB),
         "max_reply_chars": 180,
-        "prime_chars": 420,
+        "prime_chars": 360,
+        "self_test": {
+            "context": test_context,
+            "context_id": test_context_id,
+            "logit_indices": probe_indices,
+            "logit_values": [float(test_logits[i]) for i in probe_indices],
+            "tolerance": 0.06
+        },
         "files": {
             "embedding": "embedding.i8",
             "embedding_scales": "embedding-scales.f32",
@@ -258,6 +286,7 @@ def export(model: RogerVIBV04) -> None:
     (OUT_DIR / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
     total = sum(p.stat().st_size for p in OUT_DIR.iterdir() if p.is_file())
     print(f"exported browser-native v0.4 weights ({total / 1_000_000:.1f} MB total)")
+    print(f"browser self-test context_id={test_context_id}, probes={probe_indices}")
 
 
 if __name__ == "__main__":
