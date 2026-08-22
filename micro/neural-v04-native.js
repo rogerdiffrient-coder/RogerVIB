@@ -3,7 +3,7 @@
 (() => {
   const MODEL_BASE='models/micro-v0.4';
   const CONFIG_URL=`${MODEL_BASE}/config.json`;
-  const INFO={id:'neural-v0.4',name:'Micro v0.4 — Neural',version:'0.4',architecture:'hashed 4-char int8 embedding + float32 GRU character language model',parameterCount:10049184,pretrained:true,local:true,ready:false,loading:false,error:'',runtime:'native-js'};
+  const INFO={id:'neural-v0.4',name:'Micro v0.4 — Neural',version:'0.4',architecture:'hashed 4-char int8 embedding + float32 GRU character language model',parameterCount:10049184,pretrained:true,local:true,ready:false,loading:false,error:'',runtime:'native-js',artifactRevision:''};
   let config=null,weights=null,loadPromise=null,vocab=[];
 
   const errorText=e=>e instanceof Error&&e.message?e.message:typeof e==='string'?e:(()=>{try{return JSON.stringify(e)}catch{return String(e)}})();
@@ -13,7 +13,8 @@
   const yieldFrame=()=>new Promise(r=>requestAnimationFrame(()=>r()));
 
   async function fetchBuffer(name){
-    const r=await fetch(`${MODEL_BASE}/${name}`,{cache:'force-cache'});
+    const rev=encodeURIComponent(String(config?.artifact_revision||'unversioned'));
+    const r=await fetch(`${MODEL_BASE}/${name}?rev=${rev}`,{cache:'force-cache'});
     if(!r.ok)throw new Error(`${name} failed to load (HTTP ${r.status})`);
     return r.arrayBuffer();
   }
@@ -60,9 +61,7 @@
     if(!indices.length||indices.length!==values.length)throw new Error('v0.4 self-test probes are invalid');
     for(let i=0;i<indices.length;i++){
       const idx=Number(indices[i]),expected=Number(values[i]),actual=Number(state.logits[idx]);
-      if(!Number.isFinite(actual)||Math.abs(actual-expected)>tolerance){
-        throw new Error(`neural math self-test failed at logit ${idx}: ${actual} vs ${expected}`);
-      }
+      if(!Number.isFinite(actual)||Math.abs(actual-expected)>tolerance)throw new Error(`neural math self-test failed at logit ${idx}: ${actual} vs ${expected}`);
     }
   }
 
@@ -70,10 +69,11 @@
     if(weights&&config)return true;
     if(loadPromise)return loadPromise;
     loadPromise=(async()=>{INFO.loading=true;INFO.error='';try{
-      const response=await fetch(CONFIG_URL,{cache:'no-store'});
+      const response=await fetch(`${CONFIG_URL}?build=${encodeURIComponent(window.ROGERVIB_BUILD||'dev')}`,{cache:'no-store'});
       if(!response.ok)throw new Error(`v0.4 config failed to load (HTTP ${response.status})`);
       config=await response.json();
       if(config.format!=='rogervib-gru-i8-v1')throw new Error('v0.4 browser-native weights are still updating');
+      if(!config.artifact_revision)throw new Error('v0.4 artifact revision is missing; waiting for latest trained build');
       vocab=[...String(config.vocab||'')];
       if(vocab.length!==96||new Set(vocab).size!==96)throw new Error(`v0.4 vocabulary is invalid (${vocab.length} chars)`);
 
@@ -94,7 +94,7 @@
       for(let i=0;i<weights.embeddingScales.length;i+=521){if(weights.embeddingScales[i]<=0)throw new Error('embedding scales contain non-positive values');}
 
       runSelfTest();
-      INFO.parameterCount=Number(config.parameter_count)||INFO.parameterCount;INFO.architecture=config.architecture||INFO.architecture;INFO.ready=true;INFO.error='';return true;
+      INFO.parameterCount=Number(config.parameter_count)||INFO.parameterCount;INFO.architecture=config.architecture||INFO.architecture;INFO.artifactRevision=String(config.artifact_revision);INFO.ready=true;INFO.error='';return true;
     }catch(e){weights=null;config=null;INFO.ready=false;INFO.error=errorText(e)||'unknown neural runtime error';console.error('RogerVIB v0.4 native load failed:',e);throw new Error(INFO.error);}finally{INFO.loading=false;loadPromise=null;}})();
     return loadPromise;
   }
@@ -126,5 +126,5 @@
   }
 
   window.RogerVIBNeuralV04={info:INFO,load,reply};
-  window.ROGERVIB_NEURAL_RUNTIME='native-js-v0.4.2';
+  window.ROGERVIB_NEURAL_RUNTIME='native-js-v0.4.3';
 })();
