@@ -1,0 +1,172 @@
+name: Train RogerVIB v0.5 Damn Daniel (25 epochs)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'training/v04_corpus*.jsonl'
+      - 'training/train_v04.py'
+      - 'training/train_v04_fast.py'
+      - 'training/train_v05.py'
+      - 'training/publish_v05_telemetry.sh'
+      - '.github/actions/train-v05-epoch/action.yml'
+      - 'tests/validate_v05_artifact.py'
+      - 'tests/smoke_v05_inference.py'
+      - '.github/workflows/train-micro-v05.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train-rogervib-micro-v05-damn-daniel
+  cancel-in-progress: true
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: REPORT DAMN DANIEL STARTED IMMEDIATELY
+        run: bash training/publish_v05_telemetry.sh started 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install trainer dependencies
+        run: |
+          pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet numpy
+
+      - name: Epoch 1/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '1'}
+      - name: Epoch 2/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '2'}
+      - name: Epoch 3/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '3'}
+      - name: Epoch 4/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '4'}
+      - name: Epoch 5/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '5'}
+      - name: Epoch 6/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '6'}
+      - name: Epoch 7/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '7'}
+      - name: Epoch 8/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '8'}
+      - name: Epoch 9/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '9'}
+      - name: Epoch 10/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '10'}
+      - name: Epoch 11/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '11'}
+      - name: Epoch 12/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '12'}
+      - name: Epoch 13/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '13'}
+      - name: Epoch 14/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '14'}
+      - name: Epoch 15/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '15'}
+      - name: Epoch 16/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '16'}
+      - name: Epoch 17/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '17'}
+      - name: Epoch 18/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '18'}
+      - name: Epoch 19/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '19'}
+      - name: Epoch 20/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '20'}
+      - name: Epoch 21/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '21'}
+      - name: Epoch 22/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '22'}
+      - name: Epoch 23/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '23'}
+      - name: Epoch 24/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '24'}
+      - name: Epoch 25/25
+        uses: ./.github/actions/train-v05-epoch
+        with: {epoch: '25'}
+
+      - name: Promote epoch 25 to Damn Daniel candidate path
+        run: |
+          rm -rf models/micro-v0.5
+          cp -R models/micro-v0.5-epoch-25 models/micro-v0.5
+
+      - name: Validate Damn Daniel artifact
+        run: python tests/validate_v05_artifact.py
+
+      - name: Browser-like Damn Daniel quality test
+        id: quality
+        continue-on-error: true
+        env:
+          ROGERVIB_QUALITY_REPORT: training/latest_v05_quality_report.txt
+        run: python tests/smoke_v05_inference.py
+
+      - name: Upload final Damn Daniel quality diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v05-damn-daniel-quality-report
+          path: training/latest_v05_quality_report.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report Damn Daniel quality success
+        if: steps.quality.outcome == 'success'
+        run: bash training/publish_v05_telemetry.sh quality 25
+
+      - name: Report Damn Daniel quality failure
+        if: steps.quality.outcome != 'success'
+        run: bash training/publish_v05_telemetry.sh quality_failed 25
+
+      - name: Reject failed Damn Daniel candidate
+        if: steps.quality.outcome != 'success'
+        run: exit 1
+
+      - name: Publish final Damn Daniel model artifact
+        run: |
+          git config user.name 'RogerVIB Trainer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A models/micro-v0.5
+          if ! git diff --cached --quiet; then
+            git commit -m 'Train RogerVIB v0.5 Damn Daniel 25M 25-epoch model [skip ci]'
+            git pull --rebase --autostash origin main
+            git push origin HEAD:main
+          fi
+
+      - name: REPORT DAMN DANIEL PUBLISHED
+        run: bash training/publish_v05_telemetry.sh published 25
