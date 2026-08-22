@@ -1,0 +1,57 @@
+name: Train RogerVIB v0.5 Damn Daniel epoch
+description: Train, export, upload, and report one sequential v0.5 epoch
+inputs:
+  epoch:
+    description: Epoch number (1-25)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Train Damn Daniel epoch ${{ inputs.epoch }}/25
+      id: train
+      continue-on-error: true
+      shell: bash
+      run: |
+        set -o pipefail
+        EPOCH='${{ inputs.epoch }}'
+        RESUME_ARGS=()
+        if [ "$EPOCH" -gt 1 ]; then
+          PREV=$((EPOCH - 1))
+          RESUME_ARGS=(--resume "training/checkpoints/v05-epoch-${PREV}.pt")
+        fi
+        python -u training/train_v05.py \
+          --epoch "$EPOCH" \
+          "${RESUME_ARGS[@]}" \
+          --checkpoint "training/checkpoints/v05-epoch-${EPOCH}.pt" \
+          --export-dir "models/micro-v0.5-epoch-${EPOCH}" \
+          --result "training/v05-epoch-${EPOCH}-result.json" \
+          2>&1 | tee "training/v05-epoch-${EPOCH}.log"
+
+    - name: Upload Damn Daniel checkpoint ${{ inputs.epoch }}/25
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: rogervib-v05-damn-daniel-epoch-${{ inputs.epoch }}
+        path: |
+          training/checkpoints/v05-epoch-${{ inputs.epoch }}.pt
+          training/v05-epoch-${{ inputs.epoch }}-result.json
+          training/v05-epoch-${{ inputs.epoch }}.log
+          models/micro-v0.5-epoch-${{ inputs.epoch }}/
+        if-no-files-found: warn
+        compression-level: 1
+        retention-days: 7
+
+    - name: Report Damn Daniel epoch ${{ inputs.epoch }}/25
+      if: steps.train.outcome == 'success'
+      shell: bash
+      run: bash training/publish_v05_telemetry.sh epoch '${{ inputs.epoch }}'
+
+    - name: Report Damn Daniel epoch ${{ inputs.epoch }} failure
+      if: steps.train.outcome != 'success'
+      shell: bash
+      run: bash training/publish_v05_telemetry.sh failed '${{ inputs.epoch }}'
+
+    - name: Stop after failed Damn Daniel epoch
+      if: steps.train.outcome != 'success'
+      shell: bash
+      run: exit 1
