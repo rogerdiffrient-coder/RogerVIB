@@ -129,7 +129,19 @@
     form.addEventListener('submit',e=>{e.preventDefault();sendMessage();});
     input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
     input.addEventListener('input',resize);
-    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;setTransientStatus('',0);chat.model=normalizeModel(modelPicker.value);save();renderChats();updateModelUI();if(chat.model==='neural-v0.4')ensureNeural().catch(error=>setTransientStatus(`Micro v0.4 unavailable: ${errorText(error)}`));input.focus();});
+    modelPicker.addEventListener('change',()=>{
+      const chat=activeChat();if(!chat)return;
+      // Capture the user's choice BEFORE clearing status, because clearing status
+      // rerenders the picker from chat.model and would otherwise overwrite the new value.
+      const nextModel=normalizeModel(modelPicker.value);
+      chat.model=nextModel;
+      save();
+      setTransientStatus('',0);
+      renderChats();
+      updateModelUI();
+      if(nextModel==='neural-v0.4')ensureNeural().catch(error=>setTransientStatus(`Micro v0.4 unavailable: ${errorText(error)}`));
+      input.focus();
+    });
     newChat.onclick=()=>{const inherited=selectedModel();const chat=makeChat();chat.model=inherited;chats.unshift(chat);active=chat.id;setTransientStatus('',0);save();renderChats();renderConversation();updateModelUI();input.focus();};
     copy.onclick=async()=>{const chat=activeChat();if(!chat?.messages.length)return;const text=chat.messages.map(m=>`${m.role==='user'?'You':'RogerVIB'}: ${m.text}`).join('\n\n');try{await navigator.clipboard.writeText(text);copy.textContent='Copied!';setTimeout(()=>copy.textContent='Copy Chat',1000);}catch{copy.textContent='Copy failed';}};
     collapse.onclick=()=>{if(innerWidth<=760)sidebar.classList.remove('mobile-open');else sidebar.classList.toggle('collapsed');};mobile.onclick=()=>sidebar.classList.toggle('mobile-open');
