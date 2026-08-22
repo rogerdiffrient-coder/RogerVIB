@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 ROOT = Path(__file__).resolve().parents[1]
-CORPUS_PATH = ROOT / "training" / "v04_corpus.jsonl"
+TRAINING_DIR = ROOT / "training"
 OUT_DIR = ROOT / "models" / "micro-v0.4"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -36,7 +36,7 @@ HASH_BUCKETS = 104_000
 HIDDEN = 96
 SEQ = 96
 BATCH = 32
-EPOCHS = int(os.environ.get("ROGERVIB_EPOCHS", "4"))
+EPOCHS = int(os.environ.get("ROGERVIB_EPOCHS", "5"))
 LR = float(os.environ.get("ROGERVIB_LR", "0.0025"))
 
 
@@ -57,13 +57,24 @@ def context_hashes(text: str) -> list[int]:
 
 
 def load_pairs() -> list[tuple[str, str]]:
-    pairs = []
-    with CORPUS_PATH.open("r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            pairs.append((sanitize(row["user"]), sanitize(row["assistant"])))
+    pairs: list[tuple[str, str]] = []
+    sources = sorted(TRAINING_DIR.glob("v04_corpus*.jsonl"))
+    if not sources:
+        raise FileNotFoundError("no training/v04_corpus*.jsonl files found")
+    for source in sources:
+        count = 0
+        with source.open("r", encoding="utf-8") as f:
+            for line_no, line in enumerate(f, 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                user = sanitize(row.get("user", "")).strip()
+                assistant = sanitize(row.get("assistant", "")).strip()
+                if not user or not assistant:
+                    raise ValueError(f"{source.name}:{line_no} has an empty user/assistant field")
+                pairs.append((user, assistant))
+                count += 1
+        print(f"loaded {count:,} curated pairs from {source.name}")
     return pairs
 
 
@@ -95,8 +106,12 @@ def build_corpus(pairs: list[tuple[str, str]]) -> str:
         ("keep going", "sure. what part do you want more detail on?"),
         ("that makes no sense", "yeah, then i probably messed that answer up. tell me which part and ill try again."),
         ("you misunderstood me", "my bad. say it another way or point out what i got wrong and ill try again."),
+        ("still broken", "then the last fix didnt solve the real cause. lets use the exact error and trace it."),
+        ("stop repeating yourself", "fair. ill try a different answer instead of looping."),
+        ("simpler", "yep. ill keep it simpler."),
+        ("shorter", "got it. shorter answers."),
     ]
-    for _ in range(400):
+    for _ in range(700):
         a = random.choice(pairs)
         b = random.choice(pairs)
         f = random.choice(followups)
@@ -106,11 +121,13 @@ def build_corpus(pairs: list[tuple[str, str]]) -> str:
             f"user: {b[0]}\nroger: {b[1]}\n\n"
         )
 
-    subjects = ["the model", "the program", "the browser", "the player", "the level", "the code", "the network", "the dataset", "the function", "the game"]
-    verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "builds", "reads", "creates"]
-    objects = ["context", "data", "a value", "the next step", "a result", "a small state", "an answer", "a pattern", "a sequence", "the current input"]
-    endings = ["carefully", "during inference", "when needed", "one step at a time", "before returning", "while the program runs", "from the recent context", "without changing the weights"]
-    for _ in range(2500):
+    # Extra plain English gives the character model more grammatical transitions without
+    # pretending to provide giant-model world knowledge.
+    subjects = ["the model", "the program", "the browser", "the player", "the level", "the code", "the network", "the dataset", "the function", "the game", "the test", "the user"]
+    verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "builds", "reads", "creates", "returns", "loads"]
+    objects = ["context", "data", "a value", "the next step", "a result", "a small state", "an answer", "a pattern", "a sequence", "the current input", "the model weights", "an error"]
+    endings = ["carefully", "during inference", "when needed", "one step at a time", "before returning", "while the program runs", "from the recent context", "without changing the weights", "before the next step", "only after validation"]
+    for _ in range(3500):
         blocks.append(f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}.\n")
 
     random.shuffle(blocks)
@@ -210,7 +227,6 @@ def export(model: RogerVIBV04) -> None:
     write_f32("head-weight.f32", model.head.weight)
     write_f32("head-bias.f32", model.head.bias)
 
-    # Remove obsolete ONNX artifacts so production cannot accidentally use them.
     for stale in ("model.onnx", "model.onnx.data"):
         path = OUT_DIR / stale
         if path.exists():
