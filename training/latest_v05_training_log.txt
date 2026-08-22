@@ -1,0 +1,15 @@
+loaded 150 curated pairs from v04_corpus.jsonl
+loaded 130 curated pairs from v04_corpus_extra.jsonl
+FAST training corpus: 582,023 characters from 280 curated pairs
+RogerVIB v0.5 "Damn Daniel"
+parameters: 24,999,992
+architecture: 163,459 buckets x 152 hidden
+training sequences: 6,062 x 96 chars
+/home/runner/work/RogerVIB/RogerVIB/training/train_v05.py:104: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
+  total += float(loss) * len(batch_ids)
+DAMN_DANIEL_EPOCH_COMPLETE epoch=1/25 loss=2.765064
+saved resumable Damn Daniel checkpoint: training/checkpoints/v05-epoch-1.pt (300.0 MB)
+exported browser-native v0.4 weights (26.1 MB total, revision 3b440ffd933e41b7)
+browser self-test context_id=55790, probes=[0, 1, 2, 17, 42, 63, 95]
+RESULT_WRITTEN training/v05-epoch-1-result.json
