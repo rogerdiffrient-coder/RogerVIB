@@ -1,7 +1,7 @@
 {
   "epoch": 5,
-  "total_epochs": 5,
-  "loss": 0.4890378901801932,
+  "total_epochs": 10,
+  "loss": 0.48883605673933767,
   "checkpoint": "training/checkpoints/v04-epoch-5.pt",
   "export_dir": "models/micro-v0.4-epoch-5"
 }
