@@ -2,8 +2,8 @@
 """Train and export RogerVIB Micro v0.4.
 
 Architecture: learned hashed 4-character context embedding + GRU + character head.
-Most parameters live in the embedding table, keeping the recurrent compute small enough
-for browser inference while still giving the model ~10M learned parameters.
+Training is developer-side. Export is a lightweight browser-native binary format:
+int8 embedding rows with per-row scales, plus float32 GRU/head weights.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import os
 import random
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -25,13 +26,12 @@ SEED = 404
 random.seed(SEED)
 torch.manual_seed(SEED)
 
-# ASCII printable characters + newline. 96 output classes.
 VOCAB = ["\n"] + [chr(i) for i in range(32, 127)]
 TO_ID = {c: i for i, c in enumerate(VOCAB)}
 UNK_ID = TO_ID["?"]
 
-# 104,000 * 96 = 9,984,000 parameters in the learned context table.
-# The small GRU + output head bring the complete model to 10,049,184 parameters.
+# 104,000 * 96 = 9,984,000 parameters in the context table.
+# Small GRU + output head brings total to 10,049,184 parameters.
 HASH_BUCKETS = 104_000
 HIDDEN = 96
 SEQ = 96
@@ -53,7 +53,6 @@ def fnv1a(text: str) -> int:
 
 
 def context_hashes(text: str) -> list[int]:
-    # hash at position t is based on up to the last four characters ending at t
     return [fnv1a(text[max(0, i - 3): i + 1]) for i in range(len(text))]
 
 
@@ -83,14 +82,10 @@ def variants(text: str) -> list[str]:
 
 def build_corpus(pairs: list[tuple[str, str]]) -> str:
     blocks: list[str] = []
-
-    # Explicit Q/A examples, with small phrasing variants.
     for user, assistant in pairs:
         for u in variants(user):
             blocks.append(f"user: {u}\nroger: {assistant}\n\n")
 
-    # Multi-turn synthetic chats teach the recurrent state that short follow-ups refer
-    # to the current conversation instead of always triggering a canned fallback.
     followups = [
         ("huh", "yeah that probably needed a better explanation. what part was confusing?"),
         ("why", "why what? point me at the thing youre asking about."),
@@ -111,16 +106,12 @@ def build_corpus(pairs: list[tuple[str, str]]) -> str:
             f"user: {b[0]}\nroger: {b[1]}\n\n"
         )
 
-    # Small synthetic English corpus. This is intentionally plain: it teaches useful
-    # grammar/composition patterns without pretending the model has huge world knowledge.
     subjects = ["the model", "the program", "the browser", "the player", "the level", "the code", "the network", "the dataset", "the function", "the game"]
     verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "builds", "reads", "creates"]
     objects = ["context", "data", "a value", "the next step", "a result", "a small state", "an answer", "a pattern", "a sequence", "the current input"]
     endings = ["carefully", "during inference", "when needed", "one step at a time", "before returning", "while the program runs", "from the recent context", "without changing the weights"]
     for _ in range(2500):
-        blocks.append(
-            f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}.\n"
-        )
+        blocks.append(f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}.\n")
 
     random.shuffle(blocks)
     text = "".join(blocks)
@@ -149,7 +140,6 @@ def make_sequences(text: str):
     chars = list(sanitize(text))
     hashes = context_hashes("".join(chars))
     targets = [TO_ID.get(c, UNK_ID) for c in chars]
-    # x[t] predicts character t+1
     xs = hashes[:-1]
     ys = targets[1:]
     usable = (len(xs) // SEQ) * SEQ
@@ -168,8 +158,6 @@ def train() -> RogerVIBV04:
     print(f"parameters: {params:,}")
     print(f"training sequences: {xs.shape[0]:,} x {SEQ} chars")
 
-    # SparseAdam updates only embedding rows touched by this batch; AdamW handles the
-    # small dense recurrent/output core.
     emb_opt = torch.optim.SparseAdam(model.context.parameters(), lr=LR)
     dense_params = list(model.gru.parameters()) + list(model.head.parameters())
     dense_opt = torch.optim.AdamW(dense_params, lr=LR, weight_decay=0.01)
@@ -195,56 +183,65 @@ def train() -> RogerVIBV04:
             total += float(loss) * len(batch_ids)
             seen += len(batch_ids)
         print(f"epoch {epoch + 1}/{EPOCHS} loss={total / max(seen, 1):.4f}")
-
     return model
 
 
-class StepModel(nn.Module):
-    """Single-step inference graph used by the browser."""
-    def __init__(self, trained: RogerVIBV04) -> None:
-        super().__init__()
-        self.context = trained.context
-        self.gru = trained.gru
-        self.head = trained.head
-
-    def forward(self, context_id: torch.Tensor, hidden: torch.Tensor):
-        # context_id: [1], hidden: [1,1,HIDDEN]
-        x = self.context(context_id).unsqueeze(1)
-        y, next_hidden = self.gru(x, hidden)
-        logits = self.head(y[:, -1, :])
-        return logits, next_hidden
+def write_f32(name: str, tensor: torch.Tensor) -> None:
+    arr = tensor.detach().cpu().contiguous().numpy().astype("<f4", copy=False)
+    (OUT_DIR / name).write_bytes(arr.tobytes(order="C"))
 
 
 def export(model: RogerVIBV04) -> None:
     model.eval()
     params = parameter_count(model)
-    step = StepModel(model).eval()
-    onnx_path = OUT_DIR / "model.onnx"
-    dummy_id = torch.zeros((1,), dtype=torch.long)
-    dummy_hidden = torch.zeros((1, 1, HIDDEN), dtype=torch.float32)
-    torch.onnx.export(
-        step,
-        (dummy_id, dummy_hidden),
-        onnx_path,
-        input_names=["context_id", "hidden"],
-        output_names=["logits", "next_hidden"],
-        opset_version=17,
-        do_constant_folding=True,
-        external_data=False,
-    )
+
+    # Per-row int8 quantization cuts the giant embedding table from ~40 MB to ~10 MB.
+    emb = model.context.weight.detach().cpu().numpy().astype(np.float32, copy=False)
+    scales = np.max(np.abs(emb), axis=1).astype(np.float32) / 127.0
+    scales[scales == 0] = 1.0
+    quant = np.clip(np.rint(emb / scales[:, None]), -127, 127).astype(np.int8)
+    (OUT_DIR / "embedding.i8").write_bytes(quant.tobytes(order="C"))
+    (OUT_DIR / "embedding-scales.f32").write_bytes(scales.astype("<f4", copy=False).tobytes(order="C"))
+
+    write_f32("gru-weight-ih.f32", model.gru.weight_ih_l0)
+    write_f32("gru-weight-hh.f32", model.gru.weight_hh_l0)
+    write_f32("gru-bias-ih.f32", model.gru.bias_ih_l0)
+    write_f32("gru-bias-hh.f32", model.gru.bias_hh_l0)
+    write_f32("head-weight.f32", model.head.weight)
+    write_f32("head-bias.f32", model.head.bias)
+
+    # Remove obsolete ONNX artifacts so production cannot accidentally use them.
+    for stale in ("model.onnx", "model.onnx.data"):
+        path = OUT_DIR / stale
+        if path.exists():
+            path.unlink()
+
     config = {
         "name": "RogerVIB Micro v0.4 Neural",
         "version": "0.4",
-        "architecture": "hashed 4-char embedding + GRU character language model",
+        "format": "rogervib-gru-i8-v1",
+        "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
         "parameter_count": params,
         "hash_buckets": HASH_BUCKETS,
         "hidden_size": HIDDEN,
         "context_chars": 4,
         "vocab": "".join(VOCAB),
-        "max_reply_chars": 220,
+        "max_reply_chars": 180,
+        "prime_chars": 420,
+        "files": {
+            "embedding": "embedding.i8",
+            "embedding_scales": "embedding-scales.f32",
+            "gru_weight_ih": "gru-weight-ih.f32",
+            "gru_weight_hh": "gru-weight-hh.f32",
+            "gru_bias_ih": "gru-bias-ih.f32",
+            "gru_bias_hh": "gru-bias-hh.f32",
+            "head_weight": "head-weight.f32",
+            "head_bias": "head-bias.f32"
+        }
     }
     (OUT_DIR / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
-    print(f"exported {onnx_path} ({onnx_path.stat().st_size / 1_000_000:.1f} MB)")
+    total = sum(p.stat().st_size for p in OUT_DIR.iterdir() if p.is_file())
+    print(f"exported browser-native v0.4 weights ({total / 1_000_000:.1f} MB total)")
 
 
 if __name__ == "__main__":
