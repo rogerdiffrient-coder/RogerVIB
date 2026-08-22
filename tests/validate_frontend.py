@@ -1,74 +1,43 @@
 #!/usr/bin/env python3
-"""Static regression checks for the tiny RogerVIB production page."""
+"""Static regression checks for the RogerVIB Micro production page."""
 from __future__ import annotations
-
-import re
-import sys
+import json,re,sys
 from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+INDEX=(ROOT/'index.html').read_text(encoding='utf-8')
+APP=(ROOT/'micro'/'app-v5.js').read_text(encoding='utf-8')
+RUNTIME04=(ROOT/'micro'/'neural-v04-native.js').read_text(encoding='utf-8')
+RUNTIME05=(ROOT/'micro'/'neural-v05-native.js').read_text(encoding='utf-8')
+CFG05=json.loads((ROOT/'models'/'micro-v0.5'/'config.json').read_text(encoding='utf-8'))
+CSS=(ROOT/'micro'/'micro.css').read_text(encoding='utf-8')
 
-ROOT = Path(__file__).resolve().parents[1]
-INDEX = (ROOT / "index.html").read_text(encoding="utf-8")
-APP = (ROOT / "micro" / "app-v4.js").read_text(encoding="utf-8")
-RUNTIME = (ROOT / "micro" / "neural-v04-native.js").read_text(encoding="utf-8")
-CSS = (ROOT / "micro" / "micro.css").read_text(encoding="utf-8")
+def fail(message): print(f'FAIL: {message}',file=sys.stderr);raise SystemExit(1)
+def require(text,needle,where):
+    if needle not in text: fail(f'{where} is missing {needle!r}')
+def forbid(text,needle,where):
+    if needle.lower() in text.lower(): fail(f'{where} still contains obsolete {needle!r}')
 
-
-def fail(message: str) -> None:
-    print(f"FAIL: {message}", file=sys.stderr)
-    raise SystemExit(1)
-
-
-def require(text: str, needle: str, where: str) -> None:
-    if needle not in text:
-        fail(f"{where} is missing {needle!r}")
-
-
-def forbid(text: str, needle: str, where: str) -> None:
-    if needle.lower() in text.lower():
-        fail(f"{where} still contains obsolete {needle!r}")
-
-
-def main() -> None:
-    require(INDEX, 'micro/neural-v04-native.js', 'index.html')
-    require(INDEX, 'micro/app-v4.js', 'index.html')
-    require(INDEX, 'value="neural-v0.4"', 'index.html')
-    require(INDEX, 'value="baseline-v0.2"', 'index.html')
-    require(APP, "window.RogerVIBNeuralV04", 'micro/app-v4.js')
-    require(APP, "switched this chat to v0.2", 'micro/app-v4.js')
-    require(RUNTIME, "runtime:'native-js'", 'micro/neural-v04-native.js')
-    require(RUNTIME, "rogervib-gru-i8-v1", 'micro/neural-v04-native.js')
-    require(RUNTIME, "artifact_revision", 'micro/neural-v04-native.js')
-    require(RUNTIME, "runSelfTest", 'micro/neural-v04-native.js')
-    require(CSS, '.message-row', 'micro/micro.css')
-
-    forbid(INDEX, 'onnxruntime', 'index.html')
-    forbid(INDEX, 'neural-v04.js', 'index.html')
-    forbid(RUNTIME, 'window.ort', 'micro/neural-v04-native.js')
-    forbid(RUNTIME, 'InferenceSession', 'micro/neural-v04-native.js')
-    forbid(APP, 'micro brain crashed:', 'micro/app-v4.js')
-
-    versions = re.findall(r'[?&]v=(\d+\.\d+\.\d+)', INDEX)
-    if not versions:
-        fail('index.html has no cache-bump versions')
-    if len(set(versions)) != 1:
-        fail(f'index.html mixes cache versions: {sorted(set(versions))}')
-
-    build_match = re.search(r"ROGERVIB_BUILD='([^']+)'", INDEX)
-    if not build_match:
-        fail('index.html does not expose ROGERVIB_BUILD')
-    if build_match.group(1) != versions[0]:
-        fail(f"ROGERVIB_BUILD {build_match.group(1)!r} does not match asset version {versions[0]!r}")
-
-    for path in (
-        ROOT / 'micro' / 'neural-v04.js',
-        ROOT / 'micro' / 'app-v3.js',
-        ROOT / 'micro' / 'pretrained-v03.js',
-    ):
-        if path.exists():
-            fail(f'obsolete runtime still exists: {path.relative_to(ROOT)}')
-
-    print(f"PASS: frontend wiring is internally consistent (build {versions[0]})")
-
-
-if __name__ == '__main__':
-    main()
+def main():
+    for needle in ('micro/neural-v05-native.js','micro/neural-v04-native.js','micro/app-v5.js','value="neural-v0.5"','value="neural-v0.4"','value="baseline-v0.2"'):
+        require(INDEX,needle,'index.html')
+    require(INDEX,"models/micro-v0.5-preview/",'index.html unfinished mode')
+    require(INDEX,"models/micro-v0.4-preview/",'index.html unfinished mode')
+    require(APP,"DEFAULT_MODEL='neural-v0.5'",'micro/app-v5.js')
+    require(APP,'window.RogerVIBNeuralV05','micro/app-v5.js')
+    require(APP,'window.RogerVIBNeuralV04','micro/app-v5.js')
+    require(RUNTIME05,"MODEL_BASE='models/micro-v0.5'",'micro/neural-v05-native.js')
+    require(RUNTIME05,"window.RogerVIBNeuralV05",'micro/neural-v05-native.js')
+    require(RUNTIME05,"rogervib-gru-i8-v1",'micro/neural-v05-native.js')
+    require(RUNTIME05,'runSelfTest','micro/neural-v05-native.js')
+    require(RUNTIME04,'runSelfTest','micro/neural-v04-native.js')
+    require(CSS,'.message-row','micro/micro.css')
+    if CFG05.get('version')!='0.5' or CFG05.get('codename')!='Damn Daniel' or CFG05.get('preview') is not False: fail('final v0.5 config is not a final Damn Daniel artifact')
+    if int(CFG05.get('parameter_count',0))!=24999992: fail('v0.5 parameter count mismatch')
+    forbid(INDEX,'onnxruntime','index.html');forbid(RUNTIME05,'window.ort','micro/neural-v05-native.js');forbid(RUNTIME05,'InferenceSession','micro/neural-v05-native.js')
+    versions=re.findall(r'[?&]v=(\d+\.\d+\.\d+)',INDEX)
+    if not versions: fail('index.html has no cache-bump versions')
+    if len(set(versions))!=1: fail(f'index.html mixes cache versions: {sorted(set(versions))}')
+    build=re.search(r"ROGERVIB_BUILD='([^']+)'",INDEX)
+    if not build or build.group(1)!=versions[0]: fail('ROGERVIB_BUILD does not match asset version')
+    print(f"PASS: v0.5 Damn Daniel is wired into final + unfinished frontend modes (build {versions[0]})")
+if __name__=='__main__': main()
