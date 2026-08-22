@@ -121,7 +121,13 @@
     for(let i=0;i<prime.length;i++){seen+=prime[i];state=step(hashEndingAt(seen),hidden);hidden=state.hidden;if((i&47)===47)await yieldFrame();}
     if(!state)state=step(hashEndingAt(' '),hidden);
     let logits=state.logits,answer='',generated=prime;const maxChars=Math.min(180,Number(config.max_reply_chars)||180);
-    for(let i=0;i<maxChars;i++){const id=sample(logits,i<10?.48:.62,i<10?7:11,answer),ch=vocab[id]??'?';answer+=ch;generated+=ch;if(answer.endsWith('\n\n')||answer.includes('\nuser:')||isLooping(answer))break;const next=step(hashEndingAt(generated),hidden);logits=next.logits;hidden=next.hidden;if((i&11)===11)await yieldFrame();}
+    for(let i=0;i<maxChars;i++){
+      const id=sample(logits,i<10 ? 0.48 : 0.62,i<10 ? 7 : 11,answer),ch=vocab[id]??'?';
+      answer+=ch;generated+=ch;
+      if(answer.endsWith('\n\n')||answer.includes('\nuser:')||isLooping(answer))break;
+      const next=step(hashEndingAt(generated),hidden);logits=next.logits;hidden=next.hidden;
+      if((i&11)===11)await yieldFrame();
+    }
     answer=answer.replace(/^roger:\s*/i,'').replace(/\nuser:[\s\S]*$/,'').replace(/\n\n[\s\S]*$/,'').trim();if(isLooping(answer))answer=answer.replace(/(.)\1{4,}$/,'$1$1').trim();return answer||'(tiny neural silence)';
   }
 
