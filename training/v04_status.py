@@ -14,6 +14,17 @@ TRAINING = ROOT / "training"
 LATEST = TRAINING / "latest_v04_status.json"
 RESULT = TRAINING / "latest_v04_epoch_result.json"
 
+CHECKPOINT_FIELDS = (
+    "loss",
+    "artifact_revision",
+    "parameter_count",
+    "hidden_size",
+    "hash_buckets",
+    "checkpoint_dir",
+    "checkpoint_timestamp",
+    "result_parse_error",
+)
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -66,6 +77,9 @@ def record(args: argparse.Namespace) -> tuple[Path, Path]:
         data["message"] = args.message or "workflow started and reported successfully"
         append_summary(f"## RogerVIB v0.4 training run {run_id()}\n\nStarted: `{data['started_at']}`\n")
     elif args.event == "epoch":
+        # Never carry a previous epoch's metrics forward into a failed/missing checkpoint.
+        for key in CHECKPOINT_FIELDS:
+            data.pop(key, None)
         data["epoch"] = args.epoch
         data["state"] = "checkpoint" if args.outcome == "success" else "failed"
         data["outcome"] = args.outcome
