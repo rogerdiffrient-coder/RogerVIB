@@ -7,6 +7,7 @@ on:
       - 'index.html'
       - 'styles.css'
       - 'micro/**'
+      - 'models/micro-v0.5/config.json'
       - 'tests/validate_frontend.py'
       - '.github/workflows/test-micro-frontend.yml'
   pull_request:
@@ -14,6 +15,7 @@ on:
       - 'index.html'
       - 'styles.css'
       - 'micro/**'
+      - 'models/micro-v0.5/config.json'
       - 'tests/validate_frontend.py'
 
 jobs:
@@ -21,13 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Validate production wiring
         run: python tests/validate_frontend.py
-
       - name: Check JavaScript syntax
         run: |
           node --check micro/model.js
           node --check micro/neural-v04-native.js
-          node --check micro/app-v4.js
+          node --check micro/neural-v05-native.js
+          node --check micro/app-v5.js
           node --check tools/markdown-renderer.js
