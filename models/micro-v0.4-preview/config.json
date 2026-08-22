@@ -1,8 +1,8 @@
 {
-  "name": "RogerVIB Micro v0.4 CHECKPOINT 4/5",
+  "name": "RogerVIB Micro v0.4 CHECKPOINT 5/5",
   "version": "0.4",
   "format": "rogervib-gru-i8-v1",
-  "artifact_revision": "e62650e3fba22eb1",
+  "artifact_revision": "ae493cb8f4f01f34",
   "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
   "parameter_count": 10049184,
   "hash_buckets": 88950,
@@ -24,13 +24,13 @@
       95
     ],
     "logit_values": [
-      1.9647905826568604,
-      5.390951633453369,
-      -0.7643527984619141,
-      -3.1034884452819824,
-      -1.1706736087799072,
-      -1.9443261623382568,
-      -1.7873876094818115
+      2.5506279468536377,
+      6.274994850158691,
+      -1.143856406211853,
+      -3.5607590675354004,
+      -0.9189455509185791,
+      -1.7552162408828735,
+      -1.585979700088501
     ],
     "tolerance": 0.06
   },
@@ -44,9 +44,9 @@
     "head_weight": "head-weight.f32",
     "head_bias": "head-bias.f32"
   },
-  "preview": true,
-  "training_epoch": 4,
+  "preview": false,
+  "training_epoch": 5,
   "training_epochs": 5,
-  "training_loss": 0.594438169762389,
+  "training_loss": 0.4890378901801932,
   "training_profile": "quality-h112-zero-init-epoch-telemetry"
 }
