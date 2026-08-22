@@ -8,6 +8,7 @@ on:
       - 'training/v04_corpus*.jsonl'
       - 'training/train_v04.py'
       - 'tests/validate_v04_artifact.py'
+      - 'tests/smoke_v04_inference.py'
       - '.github/workflows/train-micro-v04.yml'
 
 permissions:
@@ -46,6 +47,9 @@ jobs:
 
       - name: Validate generated model
         run: python tests/validate_v04_artifact.py
+
+      - name: Smoke-test exported inference
+        run: python tests/smoke_v04_inference.py
 
       - name: Show artifact sizes
         run: du -h models/micro-v0.4/*
