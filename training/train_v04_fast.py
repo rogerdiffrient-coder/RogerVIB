@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Turbo RogerVIB Micro v0.4 training profile with a live unfinished checkpoint.
+"""Fast RogerVIB Micro v0.4 training profile.
 
-Keeps the exact 10,049,184 parameter budget while moving almost all capacity into
-cheap hashed embeddings and shrinking the expensive recurrent core. After phase 1,
-this script exports a browser-loadable checkpoint so the site can chat with RogerVIB
-while phase 2 is still training.
+Keeps the exact 10,049,184 parameter budget, but spends enough of it on the
+recurrent core to model language instead of turning almost the whole model into
+an enormous sparse lookup table. Unseen hash rows start at zero so a context
+that never appeared in the tiny corpus is neutral rather than random noise.
 """
 from __future__ import annotations
 
@@ -18,12 +18,13 @@ import torch.nn.functional as F
 
 import train_v04 as base
 
-# Same exact total parameter count, radically cheaper recurrent math.
+# Same exact total parameter count, but with a useful recurrent core.
 # params = buckets*hidden + 6*hidden^2 + 102*hidden + 96
-base.HIDDEN = 16
-base.HASH_BUCKETS = 627_870
-base.BATCH = 256
-base.EPOCHS = 2
+# 156,531*64 + 6*64^2 + 102*64 + 96 = 10,049,184
+base.HIDDEN = 64
+base.HASH_BUCKETS = 156_531
+base.BATCH = 128
+base.EPOCHS = 6
 PREVIEW_DIR = base.ROOT / "models" / "micro-v0.4-preview"
 
 
@@ -46,8 +47,8 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
         ("shorter", "got it. shorter answers."),
     ]
 
-    # A small amount of multi-turn texture is useful; hundreds of filler sentences are not.
-    for _ in range(64):
+    # Give the recurrent core enough connected dialogue to learn sentence texture.
+    for _ in range(256):
         a = random.choice(pairs)
         b = random.choice(pairs)
         f = random.choice(followups)
@@ -59,7 +60,7 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
 
     random.shuffle(blocks)
     text = "".join(blocks)
-    print(f"TURBO training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
+    print(f"FAST training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
     return text
 
 
@@ -68,7 +69,7 @@ def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epochs: int) -> None:
-    """Export epoch-N weights and push them without disturbing the final model folder."""
+    """Export one midpoint checkpoint without disturbing the final model folder."""
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
     final_out = base.OUT_DIR
     try:
@@ -80,7 +81,7 @@ def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epo
         config["preview"] = True
         config["training_epoch"] = epoch
         config["training_epochs"] = total_epochs
-        config["training_profile"] = "turbo-h16"
+        config["training_profile"] = "fast-h64-zero-init"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     finally:
         base.OUT_DIR = final_out
@@ -106,18 +107,26 @@ def train_fast() -> base.RogerVIBV04:
     corpus = fast_build_corpus(pairs)
     xs, ys = base.make_sequences(corpus)
     model = base.RogerVIBV04()
+
+    # Sparse optimizers only touch rows that occur in training. PyTorch normally
+    # initializes every embedding row randomly, which made unseen 4-char contexts
+    # inject arbitrary vectors at inference time. Zero makes unseen rows a safe,
+    # neutral input while seen rows still learn normally.
+    with torch.no_grad():
+        model.context.weight.zero_()
+
     params = base.parameter_count(model)
     assert params == 10_049_184, params
     print(f"parameters: {params:,}")
-    print(f"turbo architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden")
+    print(f"fast architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden")
     print(f"training sequences: {xs.shape[0]:,} x {base.SEQ} chars")
 
-    # SparseAdam only touches embedding rows that actually occur in this tiny corpus.
     emb_opt = torch.optim.SparseAdam(model.context.parameters(), lr=base.LR)
     dense_params = list(model.gru.parameters()) + list(model.head.parameters())
     dense_opt = torch.optim.AdamW(dense_params, lr=base.LR, weight_decay=0.01)
 
     model.train()
+    preview_epoch = max(1, base.EPOCHS // 2)
     for epoch in range(base.EPOCHS):
         order = torch.randperm(xs.shape[0])
         total = 0.0
@@ -138,7 +147,7 @@ def train_fast() -> base.RogerVIBV04:
             seen += len(batch_ids)
         print(f"epoch {epoch + 1}/{base.EPOCHS} loss={total / max(seen, 1):.4f}")
 
-        if epoch + 1 < base.EPOCHS:
+        if epoch + 1 == preview_epoch and epoch + 1 < base.EPOCHS:
             model.eval()
             publish_unfinished_checkpoint(model, epoch + 1, base.EPOCHS)
             model.train()
