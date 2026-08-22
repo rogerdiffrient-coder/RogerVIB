@@ -1,0 +1,57 @@
+name: Train RogerVIB v0.4 epoch
+description: Train, export, upload, and report one sequential RogerVIB v0.4 epoch
+inputs:
+  epoch:
+    description: Epoch number (1-10)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Train epoch ${{ inputs.epoch }}/10
+      id: train
+      continue-on-error: true
+      shell: bash
+      run: |
+        set -o pipefail
+        EPOCH='${{ inputs.epoch }}'
+        RESUME_ARGS=()
+        if [ "$EPOCH" -gt 1 ]; then
+          PREV=$((EPOCH - 1))
+          RESUME_ARGS=(--resume "training/checkpoints/v04-epoch-${PREV}.pt")
+        fi
+        python -u training/train_v04_10.py \
+          --epoch "$EPOCH" \
+          "${RESUME_ARGS[@]}" \
+          --checkpoint "training/checkpoints/v04-epoch-${EPOCH}.pt" \
+          --export-dir "models/micro-v0.4-epoch-${EPOCH}" \
+          --result "training/epoch-${EPOCH}-result.json" \
+          2>&1 | tee "training/epoch-${EPOCH}.log"
+
+    - name: Upload checkpoint ${{ inputs.epoch }}/10
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: rogervib-v04-epoch-${{ inputs.epoch }}
+        path: |
+          training/checkpoints/v04-epoch-${{ inputs.epoch }}.pt
+          training/epoch-${{ inputs.epoch }}-result.json
+          training/epoch-${{ inputs.epoch }}.log
+          models/micro-v0.4-epoch-${{ inputs.epoch }}/
+        if-no-files-found: warn
+        compression-level: 1
+        retention-days: 7
+
+    - name: Report epoch ${{ inputs.epoch }}/10
+      if: steps.train.outcome == 'success'
+      shell: bash
+      run: bash training/publish_v04_telemetry_10.sh epoch '${{ inputs.epoch }}'
+
+    - name: Report epoch ${{ inputs.epoch }} failure
+      if: steps.train.outcome != 'success'
+      shell: bash
+      run: bash training/publish_v04_telemetry_10.sh failed '${{ inputs.epoch }}'
+
+    - name: Stop after failed epoch
+      if: steps.train.outcome != 'success'
+      shell: bash
+      run: exit 1
