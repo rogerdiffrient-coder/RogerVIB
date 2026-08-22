@@ -1,37 +1,36 @@
 #!/usr/bin/env python3
 """Fast RogerVIB Micro v0.4 training profile.
 
-Keeps the exact 10,049,184 parameter budget, but spends enough of it on the
-recurrent core to model language instead of turning almost the whole model into
-an enormous sparse lookup table. Unseen hash rows start at zero so a context
-that never appeared in the tiny corpus is neutral rather than random noise.
+This profile keeps the exact 10,049,184 parameter budget, but spends more of it
+on the recurrent core and trains on substantially more connected language.
+Unseen hash rows start at zero so novel contexts are neutral instead of noise.
 """
 from __future__ import annotations
 
 import json
 import random
 import subprocess
-from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
 import train_v04 as base
 
-# Same exact total parameter count, but with a useful recurrent core.
-# params = buckets*hidden + 6*hidden^2 + 102*hidden + 96
-# 156,531*64 + 6*64^2 + 102*64 + 96 = 10,049,184
-base.HIDDEN = 64
-base.HASH_BUCKETS = 156_531
-base.BATCH = 128
-base.EPOCHS = 6
+# Exact parameter count:
+# buckets*hidden + 6*hidden^2 + 102*hidden + 96
+# 88,950*112 + 6*112^2 + 102*112 + 96 = 10,049,184
+base.HIDDEN = 112
+base.HASH_BUCKETS = 88_950
+base.BATCH = 96
+base.EPOCHS = 5
 PREVIEW_DIR = base.ROOT / "models" / "micro-v0.4-preview"
 
 
 def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
     blocks: list[str] = []
 
-    # Spend training time on human-written data first.
+    # Curated user/assistant pairs are the highest-value data. Repeat them through
+    # variants so common chat prefixes are seen many times instead of once.
     for user, assistant in pairs:
         for u in base.variants(user):
             blocks.append(f"user: {u}\nroger: {assistant}\n\n")
@@ -45,18 +44,30 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
         ("stop repeating yourself", "fair. ill try a different answer instead of looping."),
         ("simpler", "yep. ill keep it simpler."),
         ("shorter", "got it. shorter answers."),
+        ("really", "yep."),
+        ("continue", "sure. what do you want me to continue from?"),
     ]
 
-    # Give the recurrent core enough connected dialogue to learn sentence texture.
-    for _ in range(256):
+    # Connected dialogue teaches the GRU what normal conversation texture looks like.
+    for _ in range(900):
         a = random.choice(pairs)
         b = random.choice(pairs)
+        c = random.choice(pairs)
         f = random.choice(followups)
         blocks.append(
             f"user: {a[0]}\nroger: {a[1]}\n"
             f"user: {f[0]}\nroger: {f[1]}\n"
-            f"user: {b[0]}\nroger: {b[1]}\n\n"
+            f"user: {b[0]}\nroger: {b[1]}\n"
+            f"user: {c[0]}\nroger: {c[1]}\n\n"
         )
+
+    # Add plain language from the curated answers themselves. This gives the
+    # character model many more examples of spaces, words, punctuation, and sentence endings.
+    answers = [assistant for _, assistant in pairs]
+    for _ in range(2200):
+        a = random.choice(answers)
+        b = random.choice(answers)
+        blocks.append(f"{a}\n{b}\n")
 
     random.shuffle(blocks)
     text = "".join(blocks)
@@ -81,7 +92,7 @@ def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epo
         config["preview"] = True
         config["training_epoch"] = epoch
         config["training_epochs"] = total_epochs
-        config["training_profile"] = "fast-h64-zero-init"
+        config["training_profile"] = "quality-h112-zero-init"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     finally:
         base.OUT_DIR = final_out
@@ -108,17 +119,15 @@ def train_fast() -> base.RogerVIBV04:
     xs, ys = base.make_sequences(corpus)
     model = base.RogerVIBV04()
 
-    # Sparse optimizers only touch rows that occur in training. PyTorch normally
-    # initializes every embedding row randomly, which made unseen 4-char contexts
-    # inject arbitrary vectors at inference time. Zero makes unseen rows a safe,
-    # neutral input while seen rows still learn normally.
+    # SparseAdam updates only rows encountered in training. Zero initialization is
+    # essential: an unseen four-character context must not inject random noise.
     with torch.no_grad():
         model.context.weight.zero_()
 
     params = base.parameter_count(model)
     assert params == 10_049_184, params
     print(f"parameters: {params:,}")
-    print(f"fast architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden")
+    print(f"quality architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden")
     print(f"training sequences: {xs.shape[0]:,} x {base.SEQ} chars")
 
     emb_opt = torch.optim.SparseAdam(model.context.parameters(), lr=base.LR)
@@ -145,7 +154,8 @@ def train_fast() -> base.RogerVIBV04:
             dense_opt.step()
             total += float(loss) * len(batch_ids)
             seen += len(batch_ids)
-        print(f"epoch {epoch + 1}/{base.EPOCHS} loss={total / max(seen, 1):.4f}")
+        avg_loss = total / max(seen, 1)
+        print(f"epoch {epoch + 1}/{base.EPOCHS} loss={avg_loss:.4f}")
 
         if epoch + 1 == preview_epoch and epoch + 1 < base.EPOCHS:
             model.eval()
