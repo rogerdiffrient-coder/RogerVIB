@@ -33,6 +33,7 @@
     let active=localStorage.getItem(ACTIVE_KEY)||'';
     let neuralLoading=false;
     let transientStatus='';
+    let statusTimer=null;
     if(!chats.length){const first=makeChat();chats=[first];active=first.id;save();}
     if(!chats.some(c=>c.id===active))active=chats[0].id;
 
@@ -40,7 +41,12 @@
     const activeChat=()=>chats.find(c=>c.id===active);
     const selectedModel=()=>activeChat()?.model||DEFAULT_MODEL;
 
-    function setTransientStatus(text,ms=5500){transientStatus=text||'';updateModelUI();if(text)setTimeout(()=>{if(transientStatus===text){transientStatus='';updateModelUI();}},ms);}
+    function setTransientStatus(text,ms=5500){
+      transientStatus=text||'';
+      if(statusTimer){clearTimeout(statusTimer);statusTimer=null;}
+      updateModelUI();
+      if(text&&ms>0)statusTimer=setTimeout(()=>{if(transientStatus===text){transientStatus='';updateModelUI();}statusTimer=null;},ms);
+    }
     function syncComposerSpace(){const h=Math.ceil(composerWrap?.getBoundingClientRect().height||110);document.documentElement.style.setProperty('--micro-composer-space',`${h}px`);}
     function scrollToBottom(){requestAnimationFrame(()=>conversation.scrollTop=conversation.scrollHeight);}
     function renderMarkdown(el,text){if(window.RogerVIBMarkdown?.renderInto)return window.RogerVIBMarkdown.renderInto(el,String(text||''));el.textContent=String(text||'');}
@@ -83,7 +89,7 @@
       chatList.innerHTML='';
       for(const chat of chats){
         chat.model=normalizeModel(chat.model);const entry=document.createElement('div');entry.className=`chat-entry${chat.id===active?' active':''}`;
-        const button=document.createElement('button');button.className='chat-item';button.textContent=chat.title;button.title=`${chat.title} · ${modelLabel(chat.model)}`;button.onclick=()=>{active=chat.id;transientStatus='';save();renderChats();renderConversation();updateModelUI();};
+        const button=document.createElement('button');button.className='chat-item';button.textContent=chat.title;button.title=`${chat.title} · ${modelLabel(chat.model)}`;button.onclick=()=>{active=chat.id;setTransientStatus('',0);save();renderChats();renderConversation();updateModelUI();};
         const del=document.createElement('button');del.className='delete-chat';del.textContent='×';del.setAttribute('aria-label',`Delete ${chat.title}`);del.onclick=e=>{e.stopPropagation();chats=chats.filter(c=>c.id!==chat.id);if(!chats.length)chats=[makeChat()];if(!chats.some(c=>c.id===active))active=chats[0].id;save();renderChats();renderConversation();updateModelUI();};entry.append(button,del);chatList.append(entry);
       }
     }
@@ -100,8 +106,15 @@
 
     async function getReply(text,chat){
       if(chat.model==='baseline-v0.2')return window.RogerVIBMicro.reply(text,chat.messages);
-      try{await ensureNeural();return await window.RogerVIBNeuralV04.reply(text,chat.messages);}
-      catch(error){const reason=errorText(error)||'unknown v0.4 load error';console.warn('Micro v0.4 unavailable; falling back to v0.2:',reason);chat.model='baseline-v0.2';save();renderChats();setTransientStatus(`Micro v0.4 unavailable (${reason}) • switched this chat to v0.2`);return window.RogerVIBMicro.reply(text,chat.messages);}
+      try{
+        await ensureNeural();
+        return await window.RogerVIBNeuralV04.reply(text,chat.messages);
+      }catch(error){
+        const reason=errorText(error)||'unknown v0.4 load error';
+        console.warn('Micro v0.4 unavailable; using v0.2 for this reply only:',reason);
+        setTransientStatus(`Micro v0.4 unavailable (${reason}) • used v0.2 for this reply`);
+        return window.RogerVIBMicro.reply(text,chat.messages);
+      }
     }
 
     async function sendMessage(){
@@ -115,8 +128,8 @@
     form.addEventListener('submit',e=>{e.preventDefault();sendMessage();});
     input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
     input.addEventListener('input',resize);
-    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;transientStatus='';chat.model=normalizeModel(modelPicker.value);save();renderChats();updateModelUI();if(chat.model==='neural-v0.4')ensureNeural().catch(error=>setTransientStatus(`Micro v0.4 unavailable: ${errorText(error)}`));input.focus();});
-    newChat.onclick=()=>{const inherited=selectedModel();const chat=makeChat();chat.model=inherited;chats.unshift(chat);active=chat.id;transientStatus='';save();renderChats();renderConversation();updateModelUI();input.focus();};
+    modelPicker.addEventListener('change',()=>{const chat=activeChat();if(!chat)return;setTransientStatus('',0);chat.model=normalizeModel(modelPicker.value);save();renderChats();updateModelUI();if(chat.model==='neural-v0.4')ensureNeural().catch(error=>setTransientStatus(`Micro v0.4 unavailable: ${errorText(error)}`));input.focus();});
+    newChat.onclick=()=>{const inherited=selectedModel();const chat=makeChat();chat.model=inherited;chats.unshift(chat);active=chat.id;setTransientStatus('',0);save();renderChats();renderConversation();updateModelUI();input.focus();};
     copy.onclick=async()=>{const chat=activeChat();if(!chat?.messages.length)return;const text=chat.messages.map(m=>`${m.role==='user'?'You':'RogerVIB'}: ${m.text}`).join('\n\n');try{await navigator.clipboard.writeText(text);copy.textContent='Copied!';setTimeout(()=>copy.textContent='Copy Chat',1000);}catch{copy.textContent='Copy failed';}};
     collapse.onclick=()=>{if(innerWidth<=760)sidebar.classList.remove('mobile-open');else sidebar.classList.toggle('collapsed');};mobile.onclick=()=>sidebar.classList.toggle('mobile-open');
     if(window.ResizeObserver&&composerWrap)new ResizeObserver(()=>{syncComposerSpace();scrollToBottom();}).observe(composerWrap);window.addEventListener('resize',()=>{syncComposerSpace();scrollToBottom();});
