@@ -9,6 +9,11 @@
   const id=()=>crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const normalizeModel=value=>['pretrained-v0.3','neural-v0.3'].includes(value)?'neural-v0.4':(value||DEFAULT_MODEL);
   const makeChat=()=>({id:id(),title:'New conversation',model:DEFAULT_MODEL,messages:[]});
+  const errorText=error=>{
+    if(error instanceof Error&&error.message)return error.message;
+    if(typeof error==='string')return error;
+    try{return JSON.stringify(error);}catch{return String(error);}
+  };
 
   function boot(){
     const chatList=document.getElementById('chatList');
@@ -80,7 +85,7 @@
         }else if(info?.ready){
           modelDescription.textContent=`Micro v0.4 Neural • ${Number(info.parameterCount||10049184).toLocaleString()} learned parameters • local inference`;
         }else if(info?.error){
-          modelDescription.textContent=`Micro v0.4 Neural • model artifact unavailable: ${info.error}`;
+          modelDescription.textContent=`Micro v0.4 Neural • ${info.error}`;
         }else{
           modelDescription.textContent='Micro v0.4 Neural • pretrained • 10,049,184 parameters';
         }
@@ -125,11 +130,9 @@
         const reply=await getReply(text,chat);
         chat.messages.push({role:'bot',text:reply});
       }catch(error){
-        console.error(error);
-        const isBuildMissing=chat.model==='neural-v0.4'&&/404|unavailable|failed to fetch/i.test(String(error?.message||error));
-        chat.messages.push({role:'bot',text:isBuildMissing
-          ? 'Micro v0.4s pretrained neural weights are still building or failed to load. switch to Micro v0.2 for now.'
-          : `micro brain crashed: ${error.message}`});
+        console.error('RogerVIB chat failed:',error);
+        const detail=errorText(error)||'unknown error';
+        chat.messages.push({role:'bot',text:`micro brain crashed: ${detail}`});
       }finally{
         send.disabled=false;modelPicker.disabled=false;save();renderConversation();updateModelUI();input.focus();
       }
