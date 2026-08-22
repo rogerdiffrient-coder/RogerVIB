@@ -1,0 +1,53 @@
+{
+  "name": "RogerVIB v0.5 Damn Daniel CHECKPOINT 25/25",
+  "version": "0.5",
+  "format": "rogervib-gru-i8-v1",
+  "artifact_revision": "26b20e2a1be57b6f",
+  "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
+  "parameter_count": 24999992,
+  "hash_buckets": 163459,
+  "hidden_size": 152,
+  "context_chars": 4,
+  "vocab": "\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+  "max_reply_chars": 180,
+  "prime_chars": 360,
+  "self_test": {
+    "context": "test",
+    "context_id": 55790,
+    "logit_indices": [
+      0,
+      1,
+      2,
+      17,
+      42,
+      63,
+      95
+    ],
+    "logit_values": [
+      -0.3710218071937561,
+      5.511572360992432,
+      -1.4635428190231323,
+      -5.282700061798096,
+      -1.684119462966919,
+      -2.2294373512268066,
+      -1.9319701194763184
+    ],
+    "tolerance": 0.06
+  },
+  "files": {
+    "embedding": "embedding.i8",
+    "embedding_scales": "embedding-scales.f32",
+    "gru_weight_ih": "gru-weight-ih.f32",
+    "gru_weight_hh": "gru-weight-hh.f32",
+    "gru_bias_ih": "gru-bias-ih.f32",
+    "gru_bias_hh": "gru-bias-hh.f32",
+    "head_weight": "head-weight.f32",
+    "head_bias": "head-bias.f32"
+  },
+  "codename": "Damn Daniel",
+  "preview": false,
+  "training_epoch": 25,
+  "training_epochs": 25,
+  "training_loss": 0.14125794404334102,
+  "training_profile": "damn-daniel-h152-25m-25epoch"
+}
