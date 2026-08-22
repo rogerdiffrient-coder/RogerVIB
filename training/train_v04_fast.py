@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Fast RogerVIB Micro v0.4 training profile.
 
-This profile keeps the exact 10,049,184 parameter budget, but spends more of it
-on the recurrent core and trains on substantially more connected language.
-Unseen hash rows start at zero so novel contexts are neutral instead of noise.
+This profile keeps the exact 10,049,184 parameter budget, spends more of it on
+the recurrent core, trains on connected language, and deliberately performs no
+Git operations while the live PyTorch model/optimizers are running.
 """
 from __future__ import annotations
 
-import json
 import random
-import subprocess
 
 import torch
 import torch.nn.functional as F
@@ -23,14 +21,11 @@ base.HIDDEN = 112
 base.HASH_BUCKETS = 88_950
 base.BATCH = 96
 base.EPOCHS = 5
-PREVIEW_DIR = base.ROOT / "models" / "micro-v0.4-preview"
 
 
 def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
     blocks: list[str] = []
 
-    # Curated user/assistant pairs are the highest-value data. Repeat them through
-    # variants so common chat prefixes are seen many times instead of once.
     for user, assistant in pairs:
         for u in base.variants(user):
             blocks.append(f"user: {u}\nroger: {assistant}\n\n")
@@ -48,7 +43,6 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
         ("continue", "sure. what do you want me to continue from?"),
     ]
 
-    # Connected dialogue teaches the GRU what normal conversation texture looks like.
     for _ in range(900):
         a = random.choice(pairs)
         b = random.choice(pairs)
@@ -61,8 +55,6 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
             f"user: {c[0]}\nroger: {c[1]}\n\n"
         )
 
-    # Add plain language from the curated answers themselves. This gives the
-    # character model many more examples of spaces, words, punctuation, and sentence endings.
     answers = [assistant for _, assistant in pairs]
     for _ in range(2200):
         a = random.choice(answers)
@@ -71,46 +63,8 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
 
     random.shuffle(blocks)
     text = "".join(blocks)
-    print(f"FAST training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
+    print(f"FAST training corpus: {len(text):,} characters from {len(pairs)} curated pairs", flush=True)
     return text
-
-
-def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=base.ROOT, text=True, check=check)
-
-
-def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epochs: int) -> None:
-    """Export one midpoint checkpoint without disturbing the final model folder."""
-    PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-    final_out = base.OUT_DIR
-    try:
-        base.OUT_DIR = PREVIEW_DIR
-        base.export(model)
-        config_path = PREVIEW_DIR / "config.json"
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-        config["name"] = "RogerVIB Micro v0.4 UNFINISHED"
-        config["preview"] = True
-        config["training_epoch"] = epoch
-        config["training_epochs"] = total_epochs
-        config["training_profile"] = "quality-h112-zero-init"
-        config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    finally:
-        base.OUT_DIR = final_out
-
-    git("config", "user.name", "RogerVIB Trainer")
-    git("config", "user.email", "actions@users.noreply.github.com")
-    git("add", "-A", str(PREVIEW_DIR.relative_to(base.ROOT)))
-    changed = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"], cwd=base.ROOT, check=False
-    ).returncode != 0
-    if not changed:
-        print("unfinished checkpoint is unchanged; skipping preview commit")
-        return
-
-    git("commit", "-m", f"Publish RogerVIB v0.4 unfinished checkpoint epoch {epoch}/{total_epochs} [skip ci]")
-    git("pull", "--rebase", "origin", "main")
-    git("push", "origin", "HEAD:main")
-    print(f"published live unfinished checkpoint after epoch {epoch}/{total_epochs}")
 
 
 def train_fast() -> base.RogerVIBV04:
@@ -119,23 +73,20 @@ def train_fast() -> base.RogerVIBV04:
     xs, ys = base.make_sequences(corpus)
     model = base.RogerVIBV04()
 
-    # SparseAdam updates only rows encountered in training. Zero initialization is
-    # essential: an unseen four-character context must not inject random noise.
     with torch.no_grad():
         model.context.weight.zero_()
 
     params = base.parameter_count(model)
     assert params == 10_049_184, params
-    print(f"parameters: {params:,}")
-    print(f"quality architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden")
-    print(f"training sequences: {xs.shape[0]:,} x {base.SEQ} chars")
+    print(f"parameters: {params:,}", flush=True)
+    print(f"quality architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden", flush=True)
+    print(f"training sequences: {xs.shape[0]:,} x {base.SEQ} chars", flush=True)
 
     emb_opt = torch.optim.SparseAdam(model.context.parameters(), lr=base.LR)
     dense_params = list(model.gru.parameters()) + list(model.head.parameters())
     dense_opt = torch.optim.AdamW(dense_params, lr=base.LR, weight_decay=0.01)
 
     model.train()
-    preview_epoch = max(1, base.EPOCHS // 2)
     for epoch in range(base.EPOCHS):
         order = torch.randperm(xs.shape[0])
         total = 0.0
@@ -155,12 +106,7 @@ def train_fast() -> base.RogerVIBV04:
             total += float(loss) * len(batch_ids)
             seen += len(batch_ids)
         avg_loss = total / max(seen, 1)
-        print(f"epoch {epoch + 1}/{base.EPOCHS} loss={avg_loss:.4f}")
-
-        if epoch + 1 == preview_epoch and epoch + 1 < base.EPOCHS:
-            model.eval()
-            publish_unfinished_checkpoint(model, epoch + 1, base.EPOCHS)
-            model.train()
+        print(f"epoch {epoch + 1}/{base.EPOCHS} loss={avg_loss:.4f}", flush=True)
 
     return model
 
