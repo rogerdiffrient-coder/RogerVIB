@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'training/v04_corpus.jsonl'
+      - 'training/v04_corpus*.jsonl'
       - 'training/train_v04.py'
       - 'tests/validate_v04_artifact.py'
       - '.github/workflows/train-micro-v04.yml'
@@ -40,7 +40,7 @@ jobs:
 
       - name: Train and export pretrained v0.4
         env:
-          ROGERVIB_EPOCHS: '4'
+          ROGERVIB_EPOCHS: '5'
           ROGERVIB_LR: '0.0025'
         run: python training/train_v04.py
 
