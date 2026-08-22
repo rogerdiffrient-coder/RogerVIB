@@ -28,7 +28,6 @@ base.EPOCHS = 5
 
 STATE_PATH = base.TRAINING_DIR / "v04_epoch_state.pt"
 CHECKPOINT_ROOT = base.TRAINING_DIR / "v04_checkpoints"
-FINAL_DIR = base.ROOT / "models" / "micro-v0.4"
 
 
 def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
@@ -109,6 +108,8 @@ def load_or_initialize(epoch: int):
         completed = int(state.get("epoch", -1))
         if completed != epoch - 1:
             raise RuntimeError(f"cannot start epoch {epoch}: saved state is at epoch {completed}")
+        if int(state.get("hidden", -1)) != base.HIDDEN or int(state.get("hash_buckets", -1)) != base.HASH_BUCKETS:
+            raise RuntimeError("saved state architecture does not match this trainer")
         model.load_state_dict(state["model"])
         emb_opt.load_state_dict(state["emb_opt"])
         dense_opt.load_state_dict(state["dense_opt"])
@@ -155,20 +156,6 @@ def export_checkpoint(epoch: int, model) -> tuple[Path, str]:
     cfg["training_epochs"] = base.EPOCHS
     cfg["training_profile"] = "quality-h112-stateful-telemetry"
     config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-
-    if epoch == base.EPOCHS:
-        if FINAL_DIR.exists():
-            shutil.rmtree(FINAL_DIR)
-        shutil.copytree(checkpoint_dir, FINAL_DIR)
-        final_cfg_path = FINAL_DIR / "config.json"
-        final_cfg = json.loads(final_cfg_path.read_text(encoding="utf-8"))
-        final_cfg["name"] = "RogerVIB Micro v0.4 Neural"
-        final_cfg.pop("preview", None)
-        final_cfg.pop("training_epoch", None)
-        final_cfg.pop("training_epochs", None)
-        final_cfg["training_profile"] = "quality-h112-stateful-telemetry"
-        final_cfg_path.write_text(json.dumps(final_cfg, indent=2), encoding="utf-8")
-
     return checkpoint_dir, str(cfg["artifact_revision"])
 
 
