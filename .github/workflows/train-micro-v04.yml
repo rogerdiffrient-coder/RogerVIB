@@ -35,7 +35,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install onnx onnxscript
+          pip install numpy
 
       - name: Train and export pretrained v0.4
         env:
@@ -47,10 +47,10 @@ jobs:
         run: |
           git config user.name 'RogerVIB Trainer'
           git config user.email 'actions@users.noreply.github.com'
-          git add models/micro-v0.4/model.onnx models/micro-v0.4/config.json
+          git add -A models/micro-v0.4
           if git diff --cached --quiet; then
             echo 'Model artifact unchanged.'
             exit 0
           fi
-          git commit -m 'Train RogerVIB Micro v0.4 neural model [skip ci]'
+          git commit -m 'Train RogerVIB Micro v0.4 browser-native neural model [skip ci]'
           git push
