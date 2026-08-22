@@ -136,3 +136,5 @@ jobs:
           git commit -m 'Train RogerVIB Micro v0.4 quality neural model [skip ci]'
           git pull --rebase origin main
           git push
+
+# manual retrigger: 2026-08-22
