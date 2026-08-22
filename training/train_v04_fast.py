@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Fast RogerVIB Micro v0.4 training profile with a live unfinished checkpoint.
+"""Turbo RogerVIB Micro v0.4 training profile with a live unfinished checkpoint.
 
-The real final model still trains for two epochs. After epoch 1, this script exports
-and pushes a separate browser-loadable checkpoint so the site can literally chat
-with RogerVIB while epoch 2 is still training.
+Keeps the exact 10,049,184 parameter budget while moving almost all capacity into
+cheap hashed embeddings and shrinking the expensive recurrent core. After phase 1,
+this script exports a browser-loadable checkpoint so the site can chat with RogerVIB
+while phase 2 is still training.
 """
 from __future__ import annotations
 
@@ -17,8 +18,11 @@ import torch.nn.functional as F
 
 import train_v04 as base
 
-# Keep the exact model architecture/parameter count. Only training workload changes.
-base.BATCH = 64
+# Same exact total parameter count, radically cheaper recurrent math.
+# params = buckets*hidden + 6*hidden^2 + 102*hidden + 96
+base.HIDDEN = 16
+base.HASH_BUCKETS = 627_870
+base.BATCH = 256
 base.EPOCHS = 2
 PREVIEW_DIR = base.ROOT / "models" / "micro-v0.4-preview"
 
@@ -26,7 +30,7 @@ PREVIEW_DIR = base.ROOT / "models" / "micro-v0.4-preview"
 def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
     blocks: list[str] = []
 
-    # Preserve every curated pair and its useful spelling variants.
+    # Spend training time on human-written data first.
     for user, assistant in pairs:
         for u in base.variants(user):
             blocks.append(f"user: {u}\nroger: {assistant}\n\n")
@@ -42,7 +46,8 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
         ("shorter", "got it. shorter answers."),
     ]
 
-    for _ in range(180):
+    # A small amount of multi-turn texture is useful; hundreds of filler sentences are not.
+    for _ in range(64):
         a = random.choice(pairs)
         b = random.choice(pairs)
         f = random.choice(followups)
@@ -52,16 +57,9 @@ def fast_build_corpus(pairs: list[tuple[str, str]]) -> str:
             f"user: {b[0]}\nroger: {b[1]}\n\n"
         )
 
-    subjects = ["the model", "the program", "the browser", "the code", "the dataset", "the function", "the game", "the test"]
-    verbs = ["uses", "needs", "keeps", "changes", "stores", "predicts", "checks", "reads"]
-    objects = ["context", "data", "a value", "the next step", "a result", "an answer", "a pattern", "the current input"]
-    endings = ["carefully", "during inference", "when needed", "one step at a time", "before returning", "from recent context"]
-    for _ in range(500):
-        blocks.append(f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(objects)} {random.choice(endings)}.\n")
-
     random.shuffle(blocks)
     text = "".join(blocks)
-    print(f"FAST training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
+    print(f"TURBO training corpus: {len(text):,} characters from {len(pairs)} curated pairs")
     return text
 
 
@@ -82,12 +80,11 @@ def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epo
         config["preview"] = True
         config["training_epoch"] = epoch
         config["training_epochs"] = total_epochs
+        config["training_profile"] = "turbo-h16"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     finally:
         base.OUT_DIR = final_out
 
-    # The workflow checkout keeps its GitHub credential, so this makes the checkpoint
-    # visible to GitHub Pages while the same process continues into the next epoch.
     git("config", "user.name", "RogerVIB Trainer")
     git("config", "user.email", "actions@users.noreply.github.com")
     git("add", "-A", str(PREVIEW_DIR.relative_to(base.ROOT)))
@@ -99,7 +96,6 @@ def publish_unfinished_checkpoint(model: base.RogerVIBV04, epoch: int, total_epo
         return
 
     git("commit", "-m", f"Publish RogerVIB v0.4 unfinished checkpoint epoch {epoch}/{total_epochs} [skip ci]")
-    # Rebase if main moved while this runner was training, then publish the checkpoint.
     git("pull", "--rebase", "origin", "main")
     git("push", "origin", "HEAD:main")
     print(f"published live unfinished checkpoint after epoch {epoch}/{total_epochs}")
@@ -113,24 +109,25 @@ def train_fast() -> base.RogerVIBV04:
     params = base.parameter_count(model)
     assert params == 10_049_184, params
     print(f"parameters: {params:,}")
+    print(f"turbo architecture: {base.HASH_BUCKETS:,} buckets x {base.HIDDEN} hidden")
     print(f"training sequences: {xs.shape[0]:,} x {base.SEQ} chars")
 
+    # SparseAdam only touches embedding rows that actually occur in this tiny corpus.
     emb_opt = torch.optim.SparseAdam(model.context.parameters(), lr=base.LR)
     dense_params = list(model.gru.parameters()) + list(model.head.parameters())
     dense_opt = torch.optim.AdamW(dense_params, lr=base.LR, weight_decay=0.01)
-    indices = list(range(xs.shape[0]))
 
     model.train()
     for epoch in range(base.EPOCHS):
-        random.shuffle(indices)
+        order = torch.randperm(xs.shape[0])
         total = 0.0
         seen = 0
-        for start in range(0, len(indices), base.BATCH):
-            batch_ids = indices[start:start + base.BATCH]
+        for start in range(0, len(order), base.BATCH):
+            batch_ids = order[start:start + base.BATCH]
             xb = xs[batch_ids]
             yb = ys[batch_ids]
-            emb_opt.zero_grad()
-            dense_opt.zero_grad()
+            emb_opt.zero_grad(set_to_none=True)
+            dense_opt.zero_grad(set_to_none=True)
             logits, _ = model(xb)
             loss = F.cross_entropy(logits.reshape(-1, len(base.VOCAB)), yb.reshape(-1))
             loss.backward()
