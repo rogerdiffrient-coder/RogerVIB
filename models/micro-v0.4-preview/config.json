@@ -1,0 +1,50 @@
+{
+  "name": "RogerVIB Micro v0.4 UNFINISHED",
+  "version": "0.4",
+  "format": "rogervib-gru-i8-v1",
+  "artifact_revision": "862c427973674af7",
+  "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
+  "parameter_count": 10049184,
+  "hash_buckets": 104000,
+  "hidden_size": 96,
+  "context_chars": 4,
+  "vocab": "\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+  "max_reply_chars": 180,
+  "prime_chars": 360,
+  "self_test": {
+    "context": "test",
+    "context_id": 25445,
+    "logit_indices": [
+      0,
+      1,
+      2,
+      17,
+      42,
+      63,
+      95
+    ],
+    "logit_values": [
+      0.34521591663360596,
+      -0.27046769857406616,
+      -0.09821975976228714,
+      -0.5490242838859558,
+      -0.2670145332813263,
+      -0.3830001652240753,
+      -0.323880136013031
+    ],
+    "tolerance": 0.06
+  },
+  "files": {
+    "embedding": "embedding.i8",
+    "embedding_scales": "embedding-scales.f32",
+    "gru_weight_ih": "gru-weight-ih.f32",
+    "gru_weight_hh": "gru-weight-hh.f32",
+    "gru_bias_ih": "gru-bias-ih.f32",
+    "gru_bias_hh": "gru-bias-hh.f32",
+    "head_weight": "head-weight.f32",
+    "head_bias": "head-bias.f32"
+  },
+  "preview": true,
+  "training_epoch": 1,
+  "training_epochs": 2
+}
