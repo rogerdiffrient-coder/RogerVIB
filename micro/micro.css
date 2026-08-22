@@ -1,25 +1,35 @@
-:root{--micro-composer-space:112px;}
-.conversation{padding-bottom:calc(var(--micro-composer-space) + 34px)!important;}
-.composer-wrap{z-index:5;}
+:root{--micro-composer-space:112px;--micro-chat-width:820px;}
+.conversation{padding-bottom:calc(var(--micro-composer-space) + 30px)!important;scrollbar-gutter:stable;}
+.composer-wrap{z-index:5;width:min(780px,calc(100% - 40px))!important;}
 
-/* Keep the chat in one readable centered column. */
-.message-row{width:min(900px,calc(100% - 44px));max-width:none!important;margin-left:auto!important;margin-right:auto!important;}
-.message-row .message-stack{min-width:0;max-width:calc(100% - 48px);}
+/* One readable centered conversation column. */
+.message-row{width:min(var(--micro-chat-width),calc(100% - 44px));max-width:none!important;margin:0 auto 24px!important;display:flex;gap:13px;align-items:flex-start;}
+.message-row .message-stack{min-width:0;max-width:calc(100% - 46px);}
 .message-row.user{justify-content:flex-end;}
-.message-row.user .message-stack{display:flex;justify-content:flex-end;max-width:72%;}
-.message-row.user .message-bubble{max-width:100%!important;overflow-wrap:anywhere;}
-.message-row.bot .message-stack{max-width:calc(100% - 48px);}
-.message-row.bot .message-bubble{overflow-wrap:anywhere;}
+.message-row.user .message-stack{display:flex;justify-content:flex-end;max-width:74%;}
+.message-row.user .message-bubble{max-width:100%!important;overflow-wrap:anywhere;padding:9px 14px!important;line-height:1.48;}
+.message-row.bot .message-stack{max-width:calc(100% - 46px);}
+.message-row.bot .message-bubble{overflow-wrap:anywhere;line-height:1.58;}
+.bot-avatar{margin-top:1px;}
 
-.micro-model-controls{display:flex;align-items:center;gap:7px;min-width:0;}
-.micro-model-picker{appearance:none;-webkit-appearance:none;border:1px solid rgba(255,255,255,.12);outline:0;border-radius:10px;background:rgba(255,255,255,.045);color:rgba(255,255,255,.78);font-size:12px;font-weight:700;letter-spacing:.01em;min-height:34px;max-width:210px;padding:0 30px 0 11px;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,#aaa 50%),linear-gradient(135deg,#aaa 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat;}
-.micro-model-picker:hover{background-color:rgba(255,255,255,.08);}
+/* Composer should feel stable even while model state changes. */
+.composer{box-shadow:0 8px 32px rgba(0,0,0,.25)!important;}
+.composer-bottom{gap:10px;}
+.micro-model-controls{display:flex;align-items:center;gap:7px;min-width:0;max-width:calc(100% - 48px);}
+.micro-model-picker{appearance:none;-webkit-appearance:none;border:1px solid rgba(255,255,255,.12);outline:0;border-radius:10px;background:rgba(255,255,255,.045);color:rgba(255,255,255,.82);font-size:12px;font-weight:700;letter-spacing:.01em;min-height:34px;width:auto;max-width:220px;padding:0 30px 0 11px;cursor:pointer;white-space:nowrap;text-overflow:ellipsis;background-image:linear-gradient(45deg,transparent 50%,#aaa 50%),linear-gradient(135deg,#aaa 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat;transition:background-color .12s ease,border-color .12s ease,opacity .12s ease;}
+.micro-model-picker:hover{background-color:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);}
 .micro-model-picker:disabled{opacity:.55;cursor:default;}
 .micro-model-picker option{background:#242424;color:#ececec;}
+.send-button:disabled{opacity:.45;cursor:default;transform:none;}
+.disclaimer{min-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px;}
 
 @media(max-width:760px){
-  .message-row{width:calc(100% - 8px);}
-  .message-row.user .message-stack{max-width:84%;}
-  .micro-model-picker{max-width:170px}
-  .micro-model-controls{gap:5px}
+  :root{--micro-chat-width:100%;}
+  .composer-wrap{width:calc(100% - 20px)!important;}
+  .message-row{width:calc(100% - 8px);margin-bottom:20px!important;gap:10px;}
+  .message-row.user .message-stack{max-width:86%;}
+  .message-row.bot .message-stack{max-width:calc(100% - 40px);}
+  .micro-model-controls{max-width:calc(100% - 42px);}
+  .micro-model-picker{max-width:170px;font-size:11.5px;}
+  .disclaimer{font-size:10px;}
 }
