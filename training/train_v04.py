@@ -230,6 +230,7 @@ def export(model: RogerVIBV04) -> None:
         output_names=["logits", "next_hidden"],
         opset_version=17,
         do_constant_folding=True,
+        external_data=False,
     )
     config = {
         "name": "RogerVIB Micro v0.4 Neural",
