@@ -2,18 +2,18 @@
   "name": "RogerVIB Micro v0.4 UNFINISHED",
   "version": "0.4",
   "format": "rogervib-gru-i8-v1",
-  "artifact_revision": "862c427973674af7",
+  "artifact_revision": "b9286237f83ce9ab",
   "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
   "parameter_count": 10049184,
-  "hash_buckets": 104000,
-  "hidden_size": 96,
+  "hash_buckets": 627870,
+  "hidden_size": 16,
   "context_chars": 4,
   "vocab": "\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
   "max_reply_chars": 180,
   "prime_chars": 360,
   "self_test": {
     "context": "test",
-    "context_id": 25445,
+    "context_id": 568055,
     "logit_indices": [
       0,
       1,
@@ -24,13 +24,13 @@
       95
     ],
     "logit_values": [
-      0.34521591663360596,
-      -0.27046769857406616,
-      -0.09821975976228714,
-      -0.5490242838859558,
-      -0.2670145332813263,
-      -0.3830001652240753,
-      -0.323880136013031
+      0.03592847287654877,
+      0.2728847861289978,
+      -0.2790360450744629,
+      0.0898372083902359,
+      0.14693009853363037,
+      0.2950395941734314,
+      -0.17530781030654907
     ],
     "tolerance": 0.06
   },
@@ -46,5 +46,6 @@
   },
   "preview": true,
   "training_epoch": 1,
-  "training_epochs": 2
+  "training_epochs": 2,
+  "training_profile": "turbo-h16"
 }
