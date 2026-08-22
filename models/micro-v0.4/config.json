@@ -9,7 +9,30 @@
   "context_chars": 4,
   "vocab": "\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
   "max_reply_chars": 180,
-  "prime_chars": 420,
+  "prime_chars": 360,
+  "self_test": {
+    "context": "test",
+    "context_id": 25445,
+    "logit_indices": [
+      0,
+      1,
+      2,
+      17,
+      42,
+      63,
+      95
+    ],
+    "logit_values": [
+      1.182686686515808,
+      4.652223587036133,
+      0.40372511744499207,
+      -0.08317588269710541,
+      -0.5420454144477844,
+      -0.7892279028892517,
+      -0.7875335216522217
+    ],
+    "tolerance": 0.06
+  },
   "files": {
     "embedding": "embedding.i8",
     "embedding_scales": "embedding-scales.f32",
