@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -89,6 +90,18 @@ def bad_loop(text: str) -> bool:
     return False
 
 
+def language_like(text: str) -> bool:
+    """Reject the printable-ASCII punctuation soup the old smoke test allowed."""
+    if not text or not re.search(r"[A-Za-z]{2,}", text):
+        return False
+    visible = [ch for ch in text if ch != "\n"]
+    if not visible:
+        return False
+    alpha_space = sum(ch.isalpha() or ch.isspace() for ch in visible)
+    symbol_count = sum(not (ch.isalnum() or ch.isspace() or ch in "'.,!?-:;()") for ch in visible)
+    return alpha_space / len(visible) >= 0.60 and symbol_count / len(visible) <= 0.12
+
+
 def main() -> None:
     test = CFG.get("self_test") or {}
     context_id = fnv1a(str(test.get("context", "")))
@@ -112,6 +125,7 @@ def main() -> None:
     ]
     nonempty = 0
     looping = 0
+    language = 0
     for prompt in prompts:
         reply = generate(prompt)
         print(f"> {prompt}\n{reply or '[empty]'}\n")
@@ -119,6 +133,8 @@ def main() -> None:
             nonempty += 1
             if bad_loop(reply):
                 looping += 1
+            if language_like(reply):
+                language += 1
             if any(ord(ch) > 126 and ch != "\n" for ch in reply):
                 raise SystemExit(f"non-ASCII output for {prompt!r}")
 
@@ -126,8 +142,15 @@ def main() -> None:
         raise SystemExit(f"only {nonempty}/{len(prompts)} greedy prompts produced non-empty replies")
     if looping > 1:
         raise SystemExit(f"{looping}/{len(prompts)} greedy prompts fell into obvious loops")
+    if language < 6:
+        raise SystemExit(
+            f"only {language}/{len(prompts)} greedy replies looked language-like; refusing to publish gibberish"
+        )
 
-    print(f"PASS: exported v0.4 weights survive deterministic inference smoke tests ({nonempty}/{len(prompts)} non-empty)")
+    print(
+        "PASS: exported v0.4 weights survive deterministic inference smoke tests "
+        f"({nonempty}/{len(prompts)} non-empty, {language}/{len(prompts)} language-like)"
+    )
 
 
 if __name__ == "__main__":
