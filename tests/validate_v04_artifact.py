@@ -9,14 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "models" / "micro-v0.4"
 CONFIG_PATH = MODEL_DIR / "config.json"
-CORPUS_PATH = ROOT / "training" / "v04_corpus.jsonl"
+TRAINING_DIR = ROOT / "training"
 
 EXPECTED_PARAMS = 10_049_184
 EXPECTED_FORMAT = "rogervib-gru-i8-v1"
 EXPECTED_HIDDEN = 96
 EXPECTED_BUCKETS = 104_000
 EXPECTED_VOCAB = 96
-MIN_CURATED_PAIRS = 80
+MIN_CURATED_PAIRS = 180
 
 
 def fail(message: str) -> None:
@@ -72,31 +72,37 @@ def main() -> None:
         if (MODEL_DIR / obsolete).exists():
             fail(f"obsolete {obsolete} is still present")
 
+    sources = sorted(TRAINING_DIR.glob("v04_corpus*.jsonl"))
+    if not sources:
+        fail("no training/v04_corpus*.jsonl files found")
+
     pairs = 0
     seen_users: set[str] = set()
-    if not CORPUS_PATH.is_file():
-        fail("training/v04_corpus.jsonl is missing")
-    for line_no, line in enumerate(CORPUS_PATH.read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except Exception as exc:
-            fail(f"corpus line {line_no} is invalid JSON: {exc}")
-        user = str(row.get("user", "")).strip()
-        assistant = str(row.get("assistant", "")).strip()
-        if not user or not assistant:
-            fail(f"corpus line {line_no} needs non-empty user and assistant text")
-        pairs += 1
-        seen_users.add(user.lower())
+    for source in sources:
+        source_pairs = 0
+        for line_no, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except Exception as exc:
+                fail(f"{source.name}:{line_no} is invalid JSON: {exc}")
+            user = str(row.get("user", "")).strip()
+            assistant = str(row.get("assistant", "")).strip()
+            if not user or not assistant:
+                fail(f"{source.name}:{line_no} needs non-empty user and assistant text")
+            pairs += 1
+            source_pairs += 1
+            seen_users.add(user.lower())
+        print(f"corpus: {source.name} -> {source_pairs} pairs")
 
     if pairs < MIN_CURATED_PAIRS:
         fail(f"only {pairs} curated pairs; require at least {MIN_CURATED_PAIRS}")
-    if len(seen_users) < int(MIN_CURATED_PAIRS * 0.8):
+    if len(seen_users) < int(MIN_CURATED_PAIRS * 0.9):
         fail("too many duplicate user prompts in curated corpus")
 
     total_bytes = sum((MODEL_DIR / files[k]).stat().st_size for k in expected)
-    print(f"PASS: v0.4 artifact is internally consistent")
+    print("PASS: v0.4 artifact is internally consistent")
     print(f"      {EXPECTED_PARAMS:,} parameters, {pairs} curated pairs, {total_bytes/1_000_000:.2f} MB shipped weights")
 
 
