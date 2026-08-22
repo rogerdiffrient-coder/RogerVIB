@@ -1,8 +1,8 @@
 {
-  "name": "RogerVIB v0.5 Damn Daniel CHECKPOINT 4/25",
+  "name": "RogerVIB v0.5 Damn Daniel CHECKPOINT 5/25",
   "version": "0.5",
   "format": "rogervib-gru-i8-v1",
-  "artifact_revision": "2c2e3ca24ffbb2d7",
+  "artifact_revision": "d1fcbc7b37910114",
   "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
   "parameter_count": 24999992,
   "hash_buckets": 163459,
@@ -24,13 +24,13 @@
       95
     ],
     "logit_values": [
-      -0.5103442668914795,
-      4.691389560699463,
-      -0.7853806018829346,
-      -3.0382473468780518,
-      0.42609986662864685,
-      -1.986325740814209,
-      -1.5760999917984009
+      -0.504977285861969,
+      4.947637557983398,
+      -1.3922439813613892,
+      -3.6260263919830322,
+      0.8104755282402039,
+      -1.7474583387374878,
+      -1.2911064624786377
     ],
     "tolerance": 0.06
   },
@@ -46,8 +46,8 @@
   },
   "codename": "Damn Daniel",
   "preview": true,
-  "training_epoch": 4,
+  "training_epoch": 5,
   "training_epochs": 25,
-  "training_loss": 0.5401256483641839,
+  "training_loss": 0.4358455186647694,
   "training_profile": "damn-daniel-h152-25m-25epoch"
 }
