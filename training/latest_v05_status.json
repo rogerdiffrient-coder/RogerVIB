@@ -2,11 +2,11 @@
   "name": "Damn Daniel",
   "version": "0.5",
   "phase": "EPOCH_COMPLETE",
-  "detail": "Damn Daniel epoch 22/25 finished; checkpoint uploaded and preview refreshed",
-  "epoch": 22,
+  "detail": "Damn Daniel epoch 23/25 finished; checkpoint uploaded and preview refreshed",
+  "epoch": 23,
   "total_epochs": 25,
   "run_id": "32579064358",
   "run_attempt": "1",
   "source_sha": "bd064e8fced2ae591cfdff8580fa96ea5faaa83f",
-  "updated_at": "2026-08-22T14:40:13Z"
+  "updated_at": "2026-08-22T14:40:29Z"
 }
