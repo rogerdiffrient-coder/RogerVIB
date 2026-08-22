@@ -8,6 +8,7 @@ on:
       - 'training/v04_corpus*.jsonl'
       - 'training/train_v04.py'
       - 'training/train_v04_fast.py'
+      - 'training/publish_v04_telemetry.sh'
       - 'tests/validate_v04_artifact.py'
       - 'tests/smoke_v04_inference.py'
       - '.github/workflows/train-micro-v04.yml'
@@ -22,12 +23,15 @@ concurrency:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: REPORT STARTED IMMEDIATELY
+        run: bash training/publish_v04_telemetry.sh started 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,59 +43,204 @@ jobs:
           pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           pip install --quiet numpy
 
-      - name: Train and export v0.4 candidate
-        id: trainer
+      # EPOCH 1
+      - name: Train epoch 1/5
+        id: epoch1
         continue-on-error: true
-        timeout-minutes: 12
+        timeout-minutes: 10
         run: |
           set -o pipefail
-          python -u training/train_v04_fast.py 2>&1 | tee training/latest_v04_training_log.txt
+          python -u training/train_v04_fast.py \
+            --epoch 1 \
+            --checkpoint training/checkpoints/v04-epoch-1.pt \
+            --export-dir models/micro-v0.4-epoch-1 \
+            --result training/epoch-1-result.json \
+            2>&1 | tee training/epoch-1.log
 
-      - name: Publish training diagnostics
+      - name: Upload checkpoint 1/5
         if: always()
-        run: |
-          git config user.name 'RogerVIB Trainer'
-          git config user.email 'actions@users.noreply.github.com'
-          if [ ! -f training/latest_v04_training_log.txt ]; then
-            echo 'Trainer did not produce a log.' > training/latest_v04_training_log.txt
-          fi
-          git add training/latest_v04_training_log.txt
-          if ! git diff --cached --quiet; then
-            git commit -m 'Report RogerVIB v0.4 training diagnostics [skip ci]'
-            git pull --rebase origin main
-            git push
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-epoch-1
+          path: |
+            training/checkpoints/v04-epoch-1.pt
+            training/epoch-1-result.json
+            training/epoch-1.log
+            models/micro-v0.4-epoch-1/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 7
 
-      - name: Reject failed training
-        if: steps.trainer.outcome != 'success'
-        run: |
-          echo 'Trainer failed or exceeded its 12-minute step timeout.'
-          exit 1
+      - name: Report epoch 1/5
+        if: steps.epoch1.outcome == 'success'
+        run: bash training/publish_v04_telemetry.sh epoch 1
+      - name: Report epoch 1 failure
+        if: steps.epoch1.outcome != 'success'
+        run: bash training/publish_v04_telemetry.sh failed 1
+      - name: Stop after epoch 1 failure
+        if: steps.epoch1.outcome != 'success'
+        run: exit 1
 
-      - name: Publish completed candidate preview
+      # EPOCH 2
+      - name: Train epoch 2/5
+        id: epoch2
+        continue-on-error: true
+        timeout-minutes: 10
         run: |
-          rm -rf models/micro-v0.4-preview
-          cp -R models/micro-v0.4 models/micro-v0.4-preview
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p = Path('models/micro-v0.4-preview/config.json')
-          cfg = json.loads(p.read_text())
-          cfg['name'] = 'RogerVIB Micro v0.4 UNFINISHED CANDIDATE'
-          cfg['preview'] = True
-          cfg['training_epoch'] = 5
-          cfg['training_epochs'] = 5
-          cfg['training_profile'] = 'quality-h112-zero-init-uninterrupted'
-          p.write_text(json.dumps(cfg, indent=2))
-          PY
-          git config user.name 'RogerVIB Trainer'
-          git config user.email 'actions@users.noreply.github.com'
-          git add -A models/micro-v0.4-preview
-          if ! git diff --cached --quiet; then
-            git commit -m 'Publish RogerVIB v0.4 completed candidate preview [skip ci]'
-            git pull --rebase origin main
-            git push
-          fi
+          set -o pipefail
+          python -u training/train_v04_fast.py \
+            --epoch 2 \
+            --resume training/checkpoints/v04-epoch-1.pt \
+            --checkpoint training/checkpoints/v04-epoch-2.pt \
+            --export-dir models/micro-v0.4-epoch-2 \
+            --result training/epoch-2-result.json \
+            2>&1 | tee training/epoch-2.log
+
+      - name: Upload checkpoint 2/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-epoch-2
+          path: |
+            training/checkpoints/v04-epoch-2.pt
+            training/epoch-2-result.json
+            training/epoch-2.log
+            models/micro-v0.4-epoch-2/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 7
+
+      - name: Report epoch 2/5
+        if: steps.epoch2.outcome == 'success'
+        run: bash training/publish_v04_telemetry.sh epoch 2
+      - name: Report epoch 2 failure
+        if: steps.epoch2.outcome != 'success'
+        run: bash training/publish_v04_telemetry.sh failed 2
+      - name: Stop after epoch 2 failure
+        if: steps.epoch2.outcome != 'success'
+        run: exit 1
+
+      # EPOCH 3
+      - name: Train epoch 3/5
+        id: epoch3
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py \
+            --epoch 3 \
+            --resume training/checkpoints/v04-epoch-2.pt \
+            --checkpoint training/checkpoints/v04-epoch-3.pt \
+            --export-dir models/micro-v0.4-epoch-3 \
+            --result training/epoch-3-result.json \
+            2>&1 | tee training/epoch-3.log
+
+      - name: Upload checkpoint 3/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-epoch-3
+          path: |
+            training/checkpoints/v04-epoch-3.pt
+            training/epoch-3-result.json
+            training/epoch-3.log
+            models/micro-v0.4-epoch-3/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 7
+
+      - name: Report epoch 3/5
+        if: steps.epoch3.outcome == 'success'
+        run: bash training/publish_v04_telemetry.sh epoch 3
+      - name: Report epoch 3 failure
+        if: steps.epoch3.outcome != 'success'
+        run: bash training/publish_v04_telemetry.sh failed 3
+      - name: Stop after epoch 3 failure
+        if: steps.epoch3.outcome != 'success'
+        run: exit 1
+
+      # EPOCH 4
+      - name: Train epoch 4/5
+        id: epoch4
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py \
+            --epoch 4 \
+            --resume training/checkpoints/v04-epoch-3.pt \
+            --checkpoint training/checkpoints/v04-epoch-4.pt \
+            --export-dir models/micro-v0.4-epoch-4 \
+            --result training/epoch-4-result.json \
+            2>&1 | tee training/epoch-4.log
+
+      - name: Upload checkpoint 4/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-epoch-4
+          path: |
+            training/checkpoints/v04-epoch-4.pt
+            training/epoch-4-result.json
+            training/epoch-4.log
+            models/micro-v0.4-epoch-4/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 7
+
+      - name: Report epoch 4/5
+        if: steps.epoch4.outcome == 'success'
+        run: bash training/publish_v04_telemetry.sh epoch 4
+      - name: Report epoch 4 failure
+        if: steps.epoch4.outcome != 'success'
+        run: bash training/publish_v04_telemetry.sh failed 4
+      - name: Stop after epoch 4 failure
+        if: steps.epoch4.outcome != 'success'
+        run: exit 1
+
+      # EPOCH 5
+      - name: Train epoch 5/5
+        id: epoch5
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          python -u training/train_v04_fast.py \
+            --epoch 5 \
+            --resume training/checkpoints/v04-epoch-4.pt \
+            --checkpoint training/checkpoints/v04-epoch-5.pt \
+            --export-dir models/micro-v0.4-epoch-5 \
+            --result training/epoch-5-result.json \
+            2>&1 | tee training/epoch-5.log
+
+      - name: Upload checkpoint 5/5
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-epoch-5
+          path: |
+            training/checkpoints/v04-epoch-5.pt
+            training/epoch-5-result.json
+            training/epoch-5.log
+            models/micro-v0.4-epoch-5/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 7
+
+      - name: Report epoch 5/5
+        if: steps.epoch5.outcome == 'success'
+        run: bash training/publish_v04_telemetry.sh epoch 5
+      - name: Report epoch 5 failure
+        if: steps.epoch5.outcome != 'success'
+        run: bash training/publish_v04_telemetry.sh failed 5
+      - name: Stop after epoch 5 failure
+        if: steps.epoch5.outcome != 'success'
+        run: exit 1
+
+      - name: Promote epoch 5 to candidate path
+        run: |
+          rm -rf models/micro-v0.4
+          cp -R models/micro-v0.4-epoch-5 models/micro-v0.4
 
       - name: Validate generated model
         run: python tests/validate_v04_artifact.py
@@ -103,38 +252,35 @@ jobs:
           ROGERVIB_QUALITY_REPORT: training/latest_v04_quality_report.txt
         run: python tests/smoke_v04_inference.py
 
-      - name: Publish candidate quality report
+      - name: Upload final quality diagnostics
         if: always()
-        run: |
-          git config user.name 'RogerVIB Trainer'
-          git config user.email 'actions@users.noreply.github.com'
-          if [ ! -f training/latest_v04_quality_report.txt ]; then
-            echo 'Quality test did not produce a report.' > training/latest_v04_quality_report.txt
-          fi
-          git add training/latest_v04_quality_report.txt
-          if ! git diff --cached --quiet; then
-            git commit -m 'Report RogerVIB v0.4 candidate quality [skip ci]'
-            git pull --rebase origin main
-            git push
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogervib-v04-quality-report
+          path: training/latest_v04_quality_report.txt
+          if-no-files-found: warn
+          retention-days: 14
 
+      - name: Report quality success
+        if: steps.quality.outcome == 'success'
+        run: bash training/publish_v04_telemetry.sh quality 5
+      - name: Report quality failure
+        if: steps.quality.outcome != 'success'
+        run: bash training/publish_v04_telemetry.sh quality_failed 5
       - name: Reject failed candidate
         if: steps.quality.outcome != 'success'
-        run: |
-          echo 'Candidate failed browser-like quality checks. Final model will not be published.'
-          exit 1
+        run: exit 1
 
-      - name: Commit pretrained model artifact
+      - name: Publish final pretrained model artifact
         run: |
           git config user.name 'RogerVIB Trainer'
           git config user.email 'actions@users.noreply.github.com'
           git add -A models/micro-v0.4
-          if git diff --cached --quiet; then
-            echo 'Model artifact unchanged.'
-            exit 0
+          if ! git diff --cached --quiet; then
+            git commit -m 'Train RogerVIB Micro v0.4 quality neural model [skip ci]'
+            git pull --rebase --autostash origin main
+            git push origin HEAD:main
           fi
-          git commit -m 'Train RogerVIB Micro v0.4 quality neural model [skip ci]'
-          git pull --rebase origin main
-          git push
 
-# manual retrigger: 2026-08-22
+      - name: REPORT PUBLISHED
+        run: bash training/publish_v04_telemetry.sh published 5
