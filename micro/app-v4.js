@@ -104,8 +104,8 @@
       finally{neuralLoading=false;updateModelUI();}
     }
 
-    async function getReply(text,chat){
-      if(chat.model==='baseline-v0.2')return window.RogerVIBMicro.reply(text,chat.messages);
+    async function getReply(text,chat,modelAtSend){
+      if(modelAtSend==='baseline-v0.2')return window.RogerVIBMicro.reply(text,chat.messages);
       try{
         await ensureNeural();
         return await window.RogerVIBNeuralV04.reply(text,chat.messages);
@@ -119,10 +119,11 @@
 
     async function sendMessage(){
       const text=input.value.trim(),chat=activeChat();if(!text||!chat||send.disabled)return;
-      chat.messages.push({role:'user',text});if(chat.title==='New conversation')chat.title=text.length>28?`${text.slice(0,28)}…`:text;input.value='';resize();send.disabled=true;modelPicker.disabled=true;save();renderChats();renderConversation();modelDescription.textContent=`${modelLabel(chat.model)} • thinking locally…`;
-      try{const reply=await getReply(text,chat);chat.messages.push({role:'bot',text:reply});}
+      const modelAtSend=normalizeModel(chat.model);
+      chat.messages.push({role:'user',text});if(chat.title==='New conversation')chat.title=text.length>28?`${text.slice(0,28)}…`:text;input.value='';resize();send.disabled=true;save();renderChats();renderConversation();modelDescription.textContent=`${modelLabel(modelAtSend)} • thinking locally…`;
+      try{const reply=await getReply(text,chat,modelAtSend);chat.messages.push({role:'bot',text:reply});}
       catch(error){console.error('RogerVIB chat failed:',error);const detail=errorText(error)||'unknown error';chat.messages.push({role:'bot',text:`RogerVIB hit an unexpected app error: ${detail}`});}
-      finally{send.disabled=false;modelPicker.disabled=false;save();renderConversation();updateModelUI();input.focus();}
+      finally{send.disabled=false;save();renderConversation();updateModelUI();input.focus();}
     }
 
     form.addEventListener('submit',e=>{e.preventDefault();sendMessage();});
