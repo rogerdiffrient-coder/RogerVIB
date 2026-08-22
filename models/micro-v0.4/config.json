@@ -1,11 +1,23 @@
 {
   "name": "RogerVIB Micro v0.4 Neural",
   "version": "0.4",
-  "architecture": "hashed 4-char embedding + GRU character language model",
+  "format": "rogervib-gru-i8-v1",
+  "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
   "parameter_count": 10049184,
   "hash_buckets": 104000,
   "hidden_size": 96,
   "context_chars": 4,
   "vocab": "\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
-  "max_reply_chars": 220
+  "max_reply_chars": 180,
+  "prime_chars": 420,
+  "files": {
+    "embedding": "embedding.i8",
+    "embedding_scales": "embedding-scales.f32",
+    "gru_weight_ih": "gru-weight-ih.f32",
+    "gru_weight_hh": "gru-weight-hh.f32",
+    "gru_bias_ih": "gru-bias-ih.f32",
+    "gru_bias_hh": "gru-bias-hh.f32",
+    "head_weight": "head-weight.f32",
+    "head_bias": "head-bias.f32"
+  }
 }
