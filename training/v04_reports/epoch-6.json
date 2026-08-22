@@ -1,0 +1,7 @@
+{
+  "epoch": 6,
+  "total_epochs": 10,
+  "loss": 0.40093975916077146,
+  "checkpoint": "training/checkpoints/v04-epoch-6.pt",
+  "export_dir": "models/micro-v0.4-epoch-6"
+}
