@@ -7,6 +7,7 @@ int8 embedding rows with per-row scales, plus float32 GRU/head weights.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -209,7 +210,6 @@ def sigmoid_np(x: np.ndarray) -> np.ndarray:
 
 
 def native_step_reference(model: RogerVIBV04, quant: np.ndarray, scales: np.ndarray, context_id: int) -> np.ndarray:
-    """Match the browser's one-step GRU math using quantized embedding weights."""
     h = np.zeros((HIDDEN,), dtype=np.float32)
     x = quant[context_id].astype(np.float32) * scales[context_id]
     wih = model.gru.weight_ih_l0.detach().cpu().numpy().astype(np.float32)
@@ -223,6 +223,14 @@ def native_step_reference(model: RogerVIBV04, quant: np.ndarray, scales: np.ndar
     head_w = model.head.weight.detach().cpu().numpy().astype(np.float32)
     head_b = model.head.bias.detach().cpu().numpy().astype(np.float32)
     return (head_w @ h_next + head_b).astype(np.float32)
+
+
+def artifact_revision(file_names: list[str]) -> str:
+    digest = hashlib.sha256()
+    for name in file_names:
+        digest.update(name.encode("utf-8"))
+        digest.update((OUT_DIR / name).read_bytes())
+    return digest.hexdigest()[:16]
 
 
 def export(model: RogerVIBV04) -> None:
@@ -248,6 +256,18 @@ def export(model: RogerVIBV04) -> None:
         if path.exists():
             path.unlink()
 
+    file_map = {
+        "embedding": "embedding.i8",
+        "embedding_scales": "embedding-scales.f32",
+        "gru_weight_ih": "gru-weight-ih.f32",
+        "gru_weight_hh": "gru-weight-hh.f32",
+        "gru_bias_ih": "gru-bias-ih.f32",
+        "gru_bias_hh": "gru-bias-hh.f32",
+        "head_weight": "head-weight.f32",
+        "head_bias": "head-bias.f32"
+    }
+    revision = artifact_revision(list(file_map.values()))
+
     test_context = "test"
     test_context_id = fnv1a(test_context)
     test_logits = native_step_reference(model, quant, scales, test_context_id)
@@ -257,6 +277,7 @@ def export(model: RogerVIBV04) -> None:
         "name": "RogerVIB Micro v0.4 Neural",
         "version": "0.4",
         "format": "rogervib-gru-i8-v1",
+        "artifact_revision": revision,
         "architecture": "hashed 4-char int8 embedding + float32 GRU character language model",
         "parameter_count": params,
         "hash_buckets": HASH_BUCKETS,
@@ -272,20 +293,11 @@ def export(model: RogerVIBV04) -> None:
             "logit_values": [float(test_logits[i]) for i in probe_indices],
             "tolerance": 0.06
         },
-        "files": {
-            "embedding": "embedding.i8",
-            "embedding_scales": "embedding-scales.f32",
-            "gru_weight_ih": "gru-weight-ih.f32",
-            "gru_weight_hh": "gru-weight-hh.f32",
-            "gru_bias_ih": "gru-bias-ih.f32",
-            "gru_bias_hh": "gru-bias-hh.f32",
-            "head_weight": "head-weight.f32",
-            "head_bias": "head-bias.f32"
-        }
+        "files": file_map
     }
     (OUT_DIR / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
     total = sum(p.stat().st_size for p in OUT_DIR.iterdir() if p.is_file())
-    print(f"exported browser-native v0.4 weights ({total / 1_000_000:.1f} MB total)")
+    print(f"exported browser-native v0.4 weights ({total / 1_000_000:.1f} MB total, revision {revision})")
     print(f"browser self-test context_id={test_context_id}, probes={probe_indices}")
 
 
